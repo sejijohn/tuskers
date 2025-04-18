@@ -1,6 +1,6 @@
 import { StyleSheet, View, Text, TouchableOpacity, Image } from 'react-native';
 import { Tabs, useRouter } from 'expo-router';
-import { Chrome as Home, Users, LogOut, Shield, List, CircleUser as UserCircle, MessageSquare } from 'lucide-react-native';
+import { Home, LogOut, Shield, List, CircleUser as UserCircle, MessageSquare } from 'lucide-react-native';
 import { signOut } from 'firebase/auth';
 import { auth } from '../utils/firebase';
 import { useUser } from '../context/UserContext';
@@ -8,6 +8,8 @@ import { useUser } from '../context/UserContext';
 export default function TabLayout() {
   const { user, loading, setUser } = useUser();
   const router = useRouter();
+  console.log('Router:', router);
+console.log('Home Icon:', Home);
 
   const handleSignOut = async () => {
     try {
@@ -79,28 +81,36 @@ export default function TabLayout() {
         name="index"
         options={{
           title: 'Home',
-          tabBarIcon: ({ color, size }) => <Home size={size} color={color} />,
+          tabBarIcon: ({ color, size }) => {
+            console.log('Rendering Home Icon');
+          return  <Home size={size} color={color} />},
         }}
       />
       <Tabs.Screen
         name="members/index"
         options={{
           title: 'Directory',
-          tabBarIcon: ({ color, size }) => <List size={size} color={color} />,
+          tabBarIcon: ({ color, size }) => {
+            console.log('Rendering Directory Icon');
+            return <List size={size} color={color} />},
         }}
       />
       <Tabs.Screen
         name="chat"
         options={{
           title: 'Chat',
-          tabBarIcon: ({ color, size }) => <MessageSquare size={size} color={color} />,
+          tabBarIcon: ({ color, size }) => {
+            console.log('Rendering Chat Icon');
+            return <MessageSquare size={size} color={color} />},
         }}
       />
       <Tabs.Screen
         name="profile/index"
         options={{
           title: 'My Profile',
-          tabBarIcon: ({ color, size }) => <UserCircle size={size} color={color} />,
+          tabBarIcon: ({ color, size }) => {
+            console.log('Rendering Profile Icon');
+            return <UserCircle size={size} color={color} />},
         }}
       />
       {isAdmin && (
@@ -108,7 +118,9 @@ export default function TabLayout() {
           name="admin/index"
           options={{
             title: 'Admin',
-            tabBarIcon: ({ color, size }) => <Shield size={size} color={color} />,
+            tabBarIcon: ({ color, size }) => {
+              console.log('Rendering Admin Icon');
+              return <Shield size={size} color={color} />},
           }}
         />
       )}
