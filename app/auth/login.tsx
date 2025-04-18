@@ -21,10 +21,13 @@ export default function Login() {
     try {
       setLoading(true);
       setError('');
+      console.log('Auth:', auth);
+      console.log('DB:', db);
       
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const userDoc = await getDoc(doc(db, 'users', userCredential.user.uid));
       const userData = userDoc.data() as User;
+      console.log('USETDoc:', userDoc);
 
       if (!userData.approved && userData.role === 'member') {
         await auth.signOut();
