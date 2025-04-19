@@ -18,7 +18,7 @@ export default function AdminScreen() {
   // Check if user is admin, if not redirect to home
   useEffect(() => {
     if (currentUser && currentUser.role !== 'admin') {
-      router.replace('/');
+      router.replace('/(tabs)/profile');
       return;
     }
   }, [currentUser]);

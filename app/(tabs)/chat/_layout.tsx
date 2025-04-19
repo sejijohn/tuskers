@@ -1,6 +1,6 @@
 import { Stack } from 'expo-router';
 import { useEffect, useState, useCallback } from 'react';
-import { collection, doc, getDoc, getDocs } from 'firebase/firestore';
+import { doc, getDoc} from 'firebase/firestore';
 import { usePathname } from 'expo-router';
 import { db } from '../../utils/firebase';
 import { Chat } from '../../types/chat';
@@ -54,6 +54,7 @@ export default function ChatLayout() {
       }
     }
   }, [pathname, currentUser, getChatTitle, chatTitles]);
+
 
   return (
     <Stack>

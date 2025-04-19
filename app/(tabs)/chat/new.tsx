@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { StyleSheet, View, Text, TextInput, TouchableOpacity, FlatList, Image, Switch } from 'react-native';
+import { StyleSheet, View, Text, TextInput, TouchableOpacity, FlatList, Image, Switch, Platform, KeyboardAvoidingView, Keyboard } from 'react-native';
 import { useRouter } from 'expo-router';
 import { collection, query, where, getDocs, addDoc } from 'firebase/firestore';
 import { Users } from 'lucide-react-native';
@@ -7,7 +7,7 @@ import { db } from '../../utils/firebase';
 import { useUser } from '../../context/UserContext';
 import { User } from '../../types/user';
 import { Button } from '../../components/Button';
-import { KeyboardAvoidingWrapper } from '../../components/KeyboardAvoidingWrapper';
+import { v4 as uuidv4 } from 'uuid';
 
 export default function NewChat() {
   const router = useRouter();
@@ -110,8 +110,12 @@ export default function NewChat() {
   );
 
   return (
-    <KeyboardAvoidingWrapper>
-      <View style={styles.container}>
+    <KeyboardAvoidingView 
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+    >
+      <View style={styles.content}>
         <View style={styles.searchContainer}>
           <TextInput
             style={styles.searchInput}
@@ -119,6 +123,8 @@ export default function NewChat() {
             onChangeText={setSearchQuery}
             placeholder="Search users..."
             placeholderTextColor="rgba(255, 255, 255, 0.5)"
+            returnKeyType="search"
+            onSubmitEditing={Keyboard.dismiss}
           />
         </View>
 
@@ -143,6 +149,8 @@ export default function NewChat() {
               onChangeText={setGroupName}
               placeholder="Enter group name..."
               placeholderTextColor="rgba(255, 255, 255, 0.5)"
+              returnKeyType="done"
+              onSubmitEditing={Keyboard.dismiss}
             />
           </View>
         )}
@@ -157,22 +165,24 @@ export default function NewChat() {
             renderItem={renderUser}
             keyExtractor={(item) => item.id}
             contentContainerStyle={styles.userList}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
           />
         )}
-
-        <View style={styles.footer}>
-          <Button
-            title={creating ? 'Creating...' : 'Create Chat'}
-            onPress={createChat}
-            disabled={
-              creating || 
-              selectedUsers.length === 0 || 
-              (isGroupChat && !groupName.trim())
-            }
-          />
-        </View>
       </View>
-    </KeyboardAvoidingWrapper>
+
+      <View style={styles.footer}>
+        <Button
+          title={creating ? 'Creating...' : 'Create Chat'}
+          onPress={createChat}
+          disabled={
+            creating || 
+            selectedUsers.length === 0 || 
+            (isGroupChat && !groupName.trim())
+          }
+        />
+      </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -180,6 +190,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#1a2f35',
+  },
+  content: {
+    flex: 1,
   },
   searchContainer: {
     padding: 16,

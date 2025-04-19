@@ -4,12 +4,23 @@ import { Home, LogOut, Shield, List, CircleUser as UserCircle, MessageSquare } f
 import { signOut } from 'firebase/auth';
 import { auth } from '../utils/firebase';
 import { useUser } from '../context/UserContext';
+import { useEffect, useState } from 'react';
 
 export default function TabLayout() {
   const { user, loading, setUser } = useUser();
   const router = useRouter();
-  console.log('Router:', router);
-console.log('Home Icon:', Home);
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  // Define the route type
+type ChatRouteParams = {
+  id: string;
+};
+
+ useEffect(() => {
+    if (user) {
+      setIsAdmin(user.role === 'admin');
+    }
+  }, [user]);
 
   const handleSignOut = async () => {
     try {
@@ -24,8 +35,11 @@ console.log('Home Icon:', Home);
   if (loading || !user) {
     return null;
   }
+  console.log('User:', user);
+  console.log('User Role:', user.role);
+  console.log(`Is Admin?: ${isAdmin}`);
 
-  const isAdmin = user?.role === 'admin';
+  //const isAdmin = user?.role === 'admin';
 
   return (
     <Tabs 
@@ -113,17 +127,15 @@ console.log('Home Icon:', Home);
             return <UserCircle size={size} color={color} />},
         }}
       />
-      {isAdmin && (
         <Tabs.Screen
           name="admin/index"
           options={{
+            href: isAdmin ? '/admin' : null, // Hide the tab if not admin
             title: 'Admin',
-            tabBarIcon: ({ color, size }) => {
-              console.log('Rendering Admin Icon');
-              return <Shield size={size} color={color} />},
+            tabBarStyle: { display: 'flex', backgroundColor: '#243c44' }, // Hidden tab bar
+            tabBarIcon: ({ color, size }) => <Shield size={size} color={color} />,
           }}
         />
-      )}
     </Tabs>
   );
 }
