@@ -132,7 +132,7 @@ type ChatRouteParams = {
           options={{
             href: isAdmin ? '/admin' : null, // Hide the tab if not admin
             title: 'Admin',
-            tabBarStyle: { display: 'flex', backgroundColor: '#243c44' }, // Hidden tab bar
+            //tabBarStyle: { display: 'flex', backgroundColor: '#243c44' }, // Hidden tab bar
             tabBarIcon: ({ color, size }) => <Shield size={size} color={color} />,
           }}
         />

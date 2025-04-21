@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { StyleSheet, View, Text, Image } from 'react-native';
+import { StyleSheet, View, Text, Image, Platform } from 'react-native';
 import { router } from 'expo-router';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
@@ -21,13 +21,10 @@ export default function Login() {
     try {
       setLoading(true);
       setError('');
-      console.log('Auth:', auth);
-      console.log('DB:', db);
       
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const userDoc = await getDoc(doc(db, 'users', userCredential.user.uid));
       const userData = userDoc.data() as User;
-      console.log('USETDoc:', userDoc);
 
       if (!userData.approved && userData.role === 'member') {
         await auth.signOut();
@@ -151,17 +148,15 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 24,
     paddingTop: 32,
-    minHeight: 400,
     justifyContent: 'space-between',
   },
   inputsContainer: {
-    flex: 1,
     marginBottom: 24,
   },
   buttonsContainer: {
     width: '100%',
-    paddingHorizontal: 16,
-    paddingBottom: 24,
+    marginTop: 'auto',
+    paddingBottom: Platform.OS === 'ios' ? 16 : 24,
   },
   error: {
     color: '#FF6B4A',
