@@ -7,6 +7,7 @@ import { db } from '../utils/firebase';
 import { useUser } from '../context/UserContext';
 import { Button } from '../components/Button';
 import { v4 as uuidv4 } from 'uuid';
+import { Timestamp } from "firebase/firestore";
 
 export default function CreatePollScreen() {
   const router = useRouter();
@@ -82,8 +83,10 @@ export default function CreatePollScreen() {
         })),
         createdBy: user.id,
         createdByName: user.fullName,
-        createdAt: new Date().toISOString(),
-        endsAt: new Date(Date.now() + durationNum * 60 * 60 * 1000).toISOString(),
+        //createdAt: new Date().toISOString(),
+        //endsAt: new Date(Date.now() + durationNum * 60 * 60 * 1000).toISOString(),
+        createdAt: Timestamp.fromDate(new Date()),
+        endsAt: Timestamp.fromDate(new Date(Date.now() + durationNum * 60 * 60 * 1000)),
         isActive: true,
         isComplete: false,
         ridePoll: isRidePoll,

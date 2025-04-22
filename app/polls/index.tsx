@@ -6,6 +6,7 @@ import { Timer, Users, CheckCircle2, CreditCard as Edit2, Save, X } from 'lucide
 import { db } from '../utils/firebase';
 import { useUser } from '../context/UserContext';
 import { Poll } from '../types/poll';
+import { Timestamp } from "firebase/firestore"; 
 
 export default function PollsScreen() {
   const router = useRouter();
@@ -95,21 +96,39 @@ export default function PollsScreen() {
     }
   };
 
-  const getTimeLeft = (endsAt: string) => {
-    const end = new Date(endsAt).getTime();
-    const now = new Date().getTime();
-    const diff = end - now;
+  // const getTimeLeft = (endsAt: string) => {
+  //   const end = new Date(endsAt).getTime();
+  //   const now = new Date().getTime();
+  //   const diff = end - now;
 
-    if (diff <= 0) return 'Ended';
+  //   if (diff <= 0) return 'Ended';
 
-    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-    const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+  //   const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+  //   const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+  //   const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
 
-    if (days > 0) return `${days}d ${hours}h left`;
-    if (hours > 0) return `${hours}h ${minutes}m left`;
-    return `${minutes}m left`;
-  };
+  //   if (days > 0) return `${days}d ${hours}h left`;
+  //   if (hours > 0) return `${hours}h ${minutes}m left`;
+  //   return `${minutes}m left`;
+  // };
+
+
+
+const getTimeLeft = (endsAt: Timestamp) => {
+  const end = endsAt.toDate().getTime();
+  const now = new Date().getTime();
+  const diff = end - now;
+
+  if (diff <= 0) return 'Ended';
+
+  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+  const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+  const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+
+  if (days > 0) return `${days}d ${hours}h left`;
+  if (hours > 0) return `${hours}h ${minutes}m left`;
+  return `${minutes}m left`;
+};
 
   const hasVoted = (poll: Poll) => {
     return poll.options.some(option => option.votes.includes(user?.id || ''));
@@ -152,7 +171,8 @@ export default function PollsScreen() {
             const totalVotes = getTotalVotes(poll);
             const userVote = getUserVote(poll);
             const hasUserVoted = hasVoted(poll);
-            const isActive = new Date(poll.endsAt).getTime() > new Date().getTime();
+            //const isActive = new Date(poll.endsAt).getTime() > new Date().getTime();
+            const isActive = poll.endsAt.toDate().getTime() > new Date().getTime();
             const canEdit = user?.id === poll.createdBy || user?.role === 'admin';
 
             return (
@@ -252,7 +272,8 @@ export default function PollsScreen() {
                 <View style={styles.pollFooter}>
                   <Text style={styles.createdBy}>Created by {poll.createdByName}</Text>
                   <Text style={styles.createdAt}>
-                    {new Date(poll.createdAt).toLocaleDateString()}
+                    {/* {new Date(poll.createdAt).toLocaleDateString()} */}
+                    {poll.createdAt.toDate().toLocaleDateString()}
                   </Text>
                 </View>
               </View>

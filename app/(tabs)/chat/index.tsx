@@ -13,8 +13,8 @@ import { Button } from '../../components/Button';
 export default function ChatList() {
   const router = useRouter();
   const { user } = useUser();
-  const [chats, setChats] = useState<Chat[]>([]);
   const [users, setUsers] = useState<Record<string, User>>({});
+  const [chats, setChats] = useState<Chat[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [activePoll, setActivePoll] = useState<Poll | null>(null);
@@ -43,10 +43,22 @@ export default function ChatList() {
       where('isComplete', '==', false)
     );
 
-    const unsubscribePoll = onSnapshot(pollQuery, (snapshot) => {
+    const unsubscribePoll = onSnapshot(pollQuery, async (snapshot) => {
       if (!snapshot.empty) {
         const pollData = snapshot.docs[0].data() as Poll;
-        setActivePoll({ ...pollData, id: snapshot.docs[0].id });
+        const pollId = snapshot.docs[0].id;
+        //const hasEnded = new Date(pollData.endsAt).getTime() <= new Date().getTime();
+        
+        //if (!hasEnded) {
+          setActivePoll({ ...pollData, id: pollId });
+        // } else {
+        //   // If poll has ended, mark it as complete
+        //   await updateDoc(doc(db, 'polls', pollId), {
+        //     isActive: false,
+        //     isComplete: true
+        //   });
+        //   setActivePoll(null);
+        // }
       } else {
         setActivePoll(null);
       }
@@ -116,6 +128,15 @@ export default function ChatList() {
         return;
       }
 
+      const existingChat = chats.find(
+        chat => chat.type === 'group' && chat.name === 'Admin Support'
+      );
+      if (existingChat) {
+        router.push(`/chat/${existingChat.id}`);
+        return;
+      } else {
+
+
       // Create a group chat with all admins
       const chatData = {
         type: 'group',
@@ -127,6 +148,8 @@ export default function ChatList() {
 
       const chatRef = await addDoc(collection(db, 'chats'), chatData);
       router.push(`/chat/${chatRef.id}`);
+
+    }
     } catch (error) {
       console.error('Error creating admin chat:', error);
       Alert.alert('Error', 'Failed to create admin chat. Please try again.');
@@ -138,9 +161,18 @@ export default function ChatList() {
 
     try {
       const pollDoc = await getDoc(doc(db, 'polls', pollId));
-      const pollData = pollDoc.data() as Poll;
+      if (!pollDoc.exists()) {
+        setActivePoll(null);
+        return;
+      }
 
-      if (user.id !== pollData.createdBy && user.role !== 'admin') {
+      const pollData = pollDoc.data() as Poll;
+      //const hasEnded = new Date(pollData.endsAt).getTime() <= new Date().getTime();
+      const hasEnded =
+  pollData.endsAt.toDate().getTime() <= new Date().getTime();
+
+      // Check permissions: allow if user is creator/admin or if poll has ended
+      if (!hasEnded && user.id !== pollData.createdBy && user.role !== 'admin') {
         Alert.alert('Error', 'You do not have permission to delete this poll');
         return;
       }
@@ -154,16 +186,26 @@ export default function ChatList() {
             text: 'Delete',
             style: 'destructive',
             onPress: async () => {
-              await updateDoc(doc(db, 'polls', pollId), {
-                isActive: false,
-                isComplete: true
-              });
+              try {
+                // First mark the poll as complete
+                await updateDoc(doc(db, 'polls', pollId), {
+                  isActive: false,
+                  isComplete: true
+                });
+                
+                // Then delete the poll
+                await deleteDoc(doc(db, 'polls', pollId));
+                setActivePoll(null);
+              } catch (error) {
+                console.error('Error deleting poll:', error);
+                Alert.alert('Error', 'Failed to delete poll');
+              }
             }
           }
         ]
       );
     } catch (error) {
-      console.error('Error deleting poll:', error);
+      console.error('Error handling poll deletion:', error);
       Alert.alert('Error', 'Failed to delete poll');
     }
   };
@@ -235,7 +277,10 @@ export default function ChatList() {
 
     const totalVotes = activePoll.options.reduce((sum, option) => sum + option.votes.length, 0);
     const hasVoted = activePoll.options.some(option => option.votes.includes(user?.id || ''));
-    const canDelete = user?.id === activePoll.createdBy || user?.role === 'admin';
+    //const hasEnded = new Date(activePoll.endsAt).getTime() <= new Date().getTime();
+    const hasEnded = activePoll.endsAt.toDate().getTime() <= new Date().getTime();
+    const canDelete = hasEnded || user?.id === activePoll.createdBy || user?.role === 'admin';
+    console.log('canDelete:', canDelete);
 
     return (
       <View style={styles.pollContainer}>
@@ -277,7 +322,7 @@ export default function ChatList() {
         <Text style={styles.title}>Chats</Text>
         <View style={styles.headerButtons}>
           <TouchableOpacity
-            style={[styles.newChatButton, styles.pollButton,  activePoll && styles.disabledButton,]}
+            style={[styles.newChatButton, styles.pollButton, activePoll && styles.disabledButton]}
             onPress={() => {
               if (!activePoll) {
                 router.push('/polls/new');
@@ -287,8 +332,8 @@ export default function ChatList() {
           >
             <PlusCircle size={24} color={activePoll ? '#aaa' : '#3dd9d6'} />
             <Text style={[styles.pollButtonText, activePoll && styles.disabledText]}>
-    {activePoll ? 'Poll Active' : 'Create Poll'}
-  </Text>
+              {activePoll ? 'Poll Active' : 'Create Poll'}
+            </Text>
           </TouchableOpacity>
           {user?.role === 'member' && (
             <TouchableOpacity
@@ -450,14 +495,9 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   centerContent: {
-    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     padding: 20,
-  },
-  loadingText: {
-    fontSize: 16,
-    color: '#3dd9d6',
   },
   emptyText: {
     fontSize: 16,
