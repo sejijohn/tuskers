@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, Alert, Platform, KeyboardAvoidingView, Switch } from 'react-native';
 import { useRouter } from 'expo-router';
 import { collection, addDoc, query, where, getDocs } from 'firebase/firestore';
@@ -13,10 +13,23 @@ export default function CreatePollScreen() {
   const router = useRouter();
   const { user } = useUser();
   const [question, setQuestion] = useState('');
-  const [options, setOptions] = useState(['', '']);
+  const [options, setOptions] = useState<string[]>([]);
   const [duration, setDuration] = useState('24'); // Duration in hours
   const [creating, setCreating] = useState(false);
   const [isRidePoll, setIsRidePoll] = useState(false);
+
+  useEffect(() => {
+    // Initialize options to empty when component first created
+    if (options.length === 0) {
+      setOptions([]);
+    }
+    // Update options when isRidePoll changed
+    if (isRidePoll) {
+      setOptions(["Yes, I am joining the ride."]);
+    } else {
+      setOptions(['']);
+    }
+  }, [isRidePoll]);
 
   const addOption = () => {
     if (options.length < 5) {
@@ -24,14 +37,23 @@ export default function CreatePollScreen() {
     }
   };
 
+  const isFirstOptionLocked = (index: number) => {
+    return isRidePoll && index === 0;
+  }
+
   const removeOption = (index: number) => {
-    if (options.length > 2) {
+    if (options.length > 2 && !isFirstOptionLocked(index)) {
       const newOptions = options.filter((_, i) => i !== index);
       setOptions(newOptions);
     }
   };
 
+  const isRemoveButtonShow = (index: number) => {
+    return options.length > 1 && !isFirstOptionLocked(index) && (!isRidePoll || options.length > 1);
+  }
+
   const updateOption = (text: string, index: number) => {
+    if (isFirstOptionLocked(index)) return;
     const newOptions = [...options];
     newOptions[index] = text;
     setOptions(newOptions);
@@ -114,6 +136,28 @@ export default function CreatePollScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
+
+
+<View style={styles.section}>
+          <View style={styles.switchContainer}>
+            <Text style={styles.switchLabel}>Is this poll for a ride?</Text>
+            <Switch
+              value={isRidePoll}
+              onValueChange={setIsRidePoll}
+              trackColor={{ false: '#243c44', true: '#3dd9d6' }}
+              thumbColor={isRidePoll ? '#ffffff' : '#3dd9d6'}
+            />
+          </View>
+          {isRidePoll && (
+            <Text style={styles.hint}>
+              This poll will be used to organize a ride event
+            </Text>
+          )}
+        </View>
+
+
+
+
         <View style={styles.section}>
           <Text style={styles.label}>Question</Text>
           <TextInput
@@ -133,11 +177,16 @@ export default function CreatePollScreen() {
               <TextInput
                 style={styles.optionInput}
                 value={option}
-                onChangeText={(text) => updateOption(text, index)}
+                onChangeText={(text) => {
+                  if(!isFirstOptionLocked(index)){
+                    updateOption(text, index)
+                  }
+                }}
                 placeholder={`Option ${index + 1}`}
                 placeholderTextColor="rgba(255, 255, 255, 0.5)"
+                editable={!isFirstOptionLocked(index)}
               />
-              {options.length > 2 && (
+              {isRemoveButtonShow(index) && (
                 <TouchableOpacity
                   style={styles.removeButton}
                   onPress={() => removeOption(index)}
@@ -173,7 +222,7 @@ export default function CreatePollScreen() {
           </Text>
         </View>
 
-        <View style={styles.section}>
+        {/* <View style={styles.section}>
           <View style={styles.switchContainer}>
             <Text style={styles.switchLabel}>Is this poll for a ride?</Text>
             <Switch
@@ -188,7 +237,7 @@ export default function CreatePollScreen() {
               This poll will be used to organize a ride event
             </Text>
           )}
-        </View>
+        </View> */}
       </ScrollView>
 
       <View style={styles.footer}>
