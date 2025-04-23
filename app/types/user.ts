@@ -15,4 +15,5 @@ export interface User {
   city?: string;
   phoneNumber?: string;
   myRides?: string;
+  rideCounter?: number;
 }

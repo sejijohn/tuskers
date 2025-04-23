@@ -17,4 +17,5 @@ export interface PollOption {
     endsAt: Timestamp; // Firestore Timestamp
     isActive: boolean;
     isComplete: boolean; // New field to track if poll is complete
+    ridePoll?: boolean;
   }

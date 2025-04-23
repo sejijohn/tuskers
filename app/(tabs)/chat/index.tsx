@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { StyleSheet, View, Text, FlatList, TouchableOpacity, Image, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
-import { collection, query, where, onSnapshot, orderBy, getDocs, deleteDoc, doc, addDoc, updateDoc, getDoc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, orderBy, getDocs, deleteDoc, doc, addDoc, updateDoc, getDoc, increment } from 'firebase/firestore';
 import { MessageSquarePlus, Users, Trash2, Shield, PlusCircle, BarChart as ChartBar } from 'lucide-react-native';
 import { db } from '../../utils/firebase';
 import { useUser } from '../../context/UserContext';
@@ -39,8 +39,7 @@ export default function ChatList() {
     // Subscribe to active poll
     const pollQuery = query(
       collection(db, 'polls'),
-      where('isActive', '==', true),
-      where('isComplete', '==', false)
+      where('isActive', '==', true)
     );
 
     const unsubscribePoll = onSnapshot(pollQuery, async (snapshot) => {
@@ -187,15 +186,32 @@ export default function ChatList() {
             style: 'destructive',
             onPress: async () => {
               try {
-                // First mark the poll as complete
-                await updateDoc(doc(db, 'polls', pollId), {
+                // Mark the poll as deleted
+                const updateData = {
                   isActive: false,
-                  isComplete: true
+                  isComplete: hasEnded,
+                };
+                await updateDoc(doc(db, 'polls', pollId), {
+                  ...updateData
                 });
-                
-                // Then delete the poll
-                await deleteDoc(doc(db, 'polls', pollId));
-                setActivePoll(null);
+                // If it's a ride poll, decrement the rideCounter for each user
+                if (pollData.ridePoll) {
+                  const joiningOption = pollData.options.find(option => option.text === "Yes, I am joining the ride.");
+                  if (joiningOption) {
+                    if(!pollData.isComplete){
+                      for (const userId of joiningOption.votes) {
+                        const userDocRef = doc(db, 'users', userId);
+                        const userDoc = await getDoc(userDocRef);
+                        if (userDoc.exists()) {
+                          const userData = userDoc.data() as User;
+                          if (userData.rideCounter && userData.rideCounter > 0) {
+                            await updateDoc(userDocRef, { rideCounter: increment(-1) });
+                          }
+                        }
+                      }
+                    } 
+                  }
+                }              
               } catch (error) {
                 console.error('Error deleting poll:', error);
                 Alert.alert('Error', 'Failed to delete poll');
