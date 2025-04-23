@@ -44,13 +44,21 @@ export default function ChatList() {
 
     const unsubscribePoll = onSnapshot(pollQuery, async (snapshot) => {
       if (!snapshot.empty) {
-        const pollData = snapshot.docs[0].data() as Poll;
-        const pollId = snapshot.docs[0].id;
-        //const hasEnded = new Date(pollData.endsAt).getTime() <= new Date().getTime();
-        
-        //if (!hasEnded) {
+        const pollDoc = snapshot.docs[0];
+        const pollData = pollDoc.data() as Poll;
+        const pollId = pollDoc.id;
+        const hasEnded = pollData.endsAt.toDate().getTime() <= new Date().getTime();
+
+        if (!hasEnded) {
           setActivePoll({ ...pollData, id: pollId });
-        // } else {
+        } else {
+          // If poll has ended, mark it as complete
+          await updateDoc(doc(db, 'polls', pollId), {
+            isActive: false,
+            isComplete: true
+          });
+          setActivePoll(null);
+        }
         //   // If poll has ended, mark it as complete
         //   await updateDoc(doc(db, 'polls', pollId), {
         //     isActive: false,
@@ -64,13 +72,13 @@ export default function ChatList() {
       setLoadingPoll(false);
     });
 
-    const q = query(
+    const q = query( // Subscribe to changes in the 'chats' collection
       collection(db, 'chats'),
       where('participants', 'array-contains', user.id),
       orderBy('updatedAt', 'desc')
     );
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    const unsubscribeChats = onSnapshot(q, (snapshot) => {
       const chatList: Chat[] = [];
       snapshot.forEach((doc) => {
         chatList.push({ id: doc.id, ...doc.data() } as Chat);
@@ -80,8 +88,8 @@ export default function ChatList() {
     });
 
     return () => {
-      unsubscribePoll();
-      unsubscribe();
+      unsubscribePoll(); 
+      unsubscribeChats();// Unsubscribe from chats listener
     };
   }, [user]);
 
@@ -263,7 +271,7 @@ export default function ChatList() {
         style={[
           styles.deleteButton,
           deleting === item.id && styles.deleteButtonDisabled
-        ]}
+        ]} 
         onPress={() => {
           Alert.alert(
             'Delete Chat',
