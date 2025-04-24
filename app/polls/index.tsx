@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Alert, TextInput } from 'react-native';
 import { useRouter } from 'expo-router';
-import { collection, query, where, onSnapshot, doc, updateDoc } from 'firebase/firestore';
-import { Timer, Users, CheckCircle2, CreditCard as Edit2, Save, X } from 'lucide-react-native';
+import { collection, query, where, onSnapshot, doc, updateDoc, getDoc, increment } from 'firebase/firestore';
+import { Timer, Users, CheckCircle2, CreditCard as Edit2, Save, X, ListMinus } from 'lucide-react-native';
 import { db } from '../utils/firebase';
 import { useUser } from '../context/UserContext';
 import { Poll } from '../types/poll';
@@ -37,31 +37,86 @@ export default function PollsScreen() {
     return () => unsubscribe();
   }, [user]);
 
-  const handleVote = async (pollId: string, optionId: string) => {
-    if (!user) return;
+  const handleVote = async (optionId: string, poll: Poll) => {
+        if (!user) return;
 
-    try {
-      const pollRef = doc(db, 'polls', pollId);
-      const poll = polls.find(p => p.id === pollId);
-      
-      if (!poll) return;
+        try {
+            const isVoting = poll.options.find(option => option.votes.includes(user.id));
 
-      // Remove user's vote from all options first
-      const updatedOptions = poll.options.map(option => ({
-        ...option,
-        votes: option.votes.filter(voterId => voterId !== user.id)
-      }));
+            if(isVoting && isVoting.id === optionId){
+                await updateDoc(doc(db, 'polls', poll.id), {
+                    options: poll.options.map(option => ({
+                        ...option,
+                        votes: option.id === optionId ? option.votes.filter(userId => userId !== user.id) : option.votes,
+                    })),
+                });
 
-      // Add vote to selected option
-      const finalOptions = updatedOptions.map(option => 
-        option.id === optionId
-          ? { ...option, votes: [...option.votes, user.id] }
-          : option
-      );
+                // Check if the user is deselecting "Yes, I am joining the ride."
+                const previousVote = poll.options.find(option => option.votes.includes(user.id));
+                if (
+                  poll.ridePoll &&
+                  previousVote &&
+                  previousVote.text === "Yes, I am joining the ride." &&
+                  optionId === previousVote.id
+                ) {
+                  // Decrement the rideCounter
+                  const userDocRef = doc(db, 'users', user.id);
+                  const userDoc = await getDoc(userDocRef);
+                  if (userDoc.exists()) {
+                    const userData = userDoc.data();
+                    if (userData.rideCounter && userData.rideCounter > 0) {
+                      await updateDoc(userDocRef, { rideCounter: increment(-1) });
+                    }
+                  }
+                }
+                return;
+            }
 
-      await updateDoc(pollRef, {
-        options: finalOptions,
-      });
+            await updateDoc(doc(db, 'polls', poll.id), {
+                options: poll.options.map(option => ({
+                    ...option,
+                    votes: option.id === optionId ? [...option.votes, user.id] : option.votes.filter(userId => userId !== user.id),
+                })),
+            });
+
+            // Handle rideCounter for ride polls
+            if (poll.ridePoll) {
+                const selectedOption = poll.options.find(option => option.id === optionId);
+                // Check if the user is voting for "Yes, I am joining the ride."
+                if (selectedOption && selectedOption.text === "Yes, I am joining the ride.") {
+                    // Increment the rideCounter
+                    const userDocRef = doc(db, 'users', user.id);
+                    const userDoc = await getDoc(userDocRef);
+                    if (userDoc.exists()) {
+                      const userData = userDoc.data();
+                      if (userData.rideCounter) {
+                        await updateDoc(userDocRef, { rideCounter: increment(1) });
+                      } else {
+                        await updateDoc(userDocRef, { rideCounter: 1 });
+                      }
+                    }
+                } else {
+                    // Check if the user is deselecting "Yes, I am joining the ride."
+                    const previousVote = poll.options.find(option => option.votes.includes(user.id));
+                    if (
+                      poll.ridePoll &&
+                      previousVote &&
+                      previousVote.text === "Yes, I am joining the ride." &&
+                      optionId !== previousVote.id
+                    ) {
+                      // Decrement the rideCounter
+                      const userDocRef = doc(db, 'users', user.id);
+                      const userDoc = await getDoc(userDocRef);
+                      if (userDoc.exists()) {
+                        const userData = userDoc.data();
+                        if (userData.rideCounter && userData.rideCounter > 0) {
+                          await updateDoc(userDocRef, { rideCounter: increment(-1) });
+                        }
+                      }
+                    }
+                }
+            }
+        
     } catch (error) {
       console.error('Error voting:', error);
       Alert.alert('Error', 'Failed to submit vote. Please try again.');
@@ -239,7 +294,7 @@ const getTimeLeft = (endsAt: Timestamp) => {
                           isSelected && styles.selectedOption,
                           !isActive && styles.inactiveOption
                         ]}
-                        onPress={() => isActive && handleVote(poll.id, option.id)}
+                        onPress={() => isActive && handleVote(option.id, poll)}
                         disabled={!isActive}
                       >
                         <View style={styles.optionContent}>

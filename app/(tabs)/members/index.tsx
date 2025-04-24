@@ -4,7 +4,7 @@ import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { db } from '../../utils/firebase';
 import { User } from '../../types/user';
 import { useUser } from '../../context/UserContext';
-import { Shield, Mail, MapPin, Phone } from 'lucide-react-native';
+import { Shield, Mail, MapPin, Phone, Bike } from 'lucide-react-native';
 
 export default function MembersScreen() {
   const { user: currentUser } = useUser();
@@ -23,16 +23,16 @@ export default function MembersScreen() {
         where('approved', '==', true),
         where('deleted', '==', false)
       );
-      
+
       // Set up real-time listener
-      const unsubscribe = onSnapshot(q, 
+      const unsubscribe = onSnapshot(q,
         (snapshot) => {
           const users: User[] = [];
           snapshot.forEach((doc) => {
             const userData = { ...doc.data(), id: doc.id } as User;
             users.push(userData);
           });
-          
+
           // Sort users by fullName
           const sortedUsers = users.sort((a, b) => a.fullName.localeCompare(b.fullName));
           setMembers(sortedUsers);
@@ -120,7 +120,7 @@ export default function MembersScreen() {
                   </View>
                 </View>
               </View>
-              
+
               <View style={styles.detailsContainer}>
                 {member.email && (
                   <View style={styles.detailRow}>
@@ -140,6 +140,15 @@ export default function MembersScreen() {
                     <Text style={styles.detailText}>{member.phoneNumber}</Text>
                   </View>
                 )}
+                {currentUser.role === "admin" && (
+                  <View style={styles.detailRow}>
+                    <Bike size={16} color="#ffffff" />
+                    <Text style={styles.detailText}>
+                      Rides Participated: {member.rideCounter != null ? String(member.rideCounter) : '0'}
+                    </Text>
+                  </View>
+                )}
+
               </View>
 
               {!!member.myRides && (
