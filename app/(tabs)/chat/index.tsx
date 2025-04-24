@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { StyleSheet, View, Text, FlatList, TouchableOpacity, Image, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { collection, query, where, onSnapshot, orderBy, getDocs, deleteDoc, doc, addDoc, updateDoc, getDoc, increment } from 'firebase/firestore';
-import { MessageSquarePlus, Users, Trash2, Shield, PlusCircle, BarChart as ChartBar } from 'lucide-react-native';
+import { MessageSquarePlus, Users, Trash2, Shield, PlusCircle, BarChart as ChartBar, List } from 'lucide-react-native';
 import { db } from '../../utils/firebase';
 import { useUser } from '../../context/UserContext';
 import { Chat } from '../../types/chat';
@@ -356,9 +356,22 @@ export default function ChatList() {
           >
             <PlusCircle size={24} color={activePoll ? '#aaa' : '#3dd9d6'} />
             <Text style={[styles.pollButtonText, activePoll && styles.disabledText]}>
-              {activePoll ? 'Poll Active' : 'Create Poll'}
+              {activePoll ? 'Poll Active' : 'New Poll'}
             </Text>
           </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.newChatButton, styles.pollButton]}
+            onPress={() => router.push('/polls/completed')}
+          >
+            <List size={24} color="#3dd9d6" />
+            <Text style={styles.pollButtonText}>
+              All Polls
+            </Text>
+          </TouchableOpacity>
+
+
+
+
           {user?.role === 'member' && (
             <TouchableOpacity
               style={[styles.newChatButton, styles.adminChatButton]}
