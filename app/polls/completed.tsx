@@ -1,15 +1,16 @@
 import { useState, useEffect } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Alert, TextInput } from 'react-native';
 import { useRouter } from 'expo-router';
-import { collection, query, where, onSnapshot, doc, updateDoc, getDoc, increment } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, updateDoc, getDoc, increment, getDocs } from 'firebase/firestore';
 import { Timer, Users, CheckCircle2, CreditCard as Edit2, Save, X } from 'lucide-react-native';
 import { db } from '../utils/firebase';
 import { useUser } from '../context/UserContext';
 import { Poll } from '../types/poll';
-import { Timestamp } from "firebase/firestore"; 
+import { Timestamp } from "firebase/firestore";
+import { User } from '../types/user';
 
 export default function CompletedPollsScreen() {
-  const router = useRouter();
+    const router = useRouter();
   const { user } = useUser();
   const [polls, setPolls] = useState<Poll[]>([]);
   const [loading, setLoading] = useState(true);
@@ -17,23 +18,37 @@ export default function CompletedPollsScreen() {
   const [editedQuestion, setEditedQuestion] = useState('');
 
   useEffect(() => {
-    if (!user) return;
-
-    const q = query( // Subscribe to changes in the 'polls' collection
-        collection(db, 'polls'),
-        where('isActive', '==', false),
-        where('isComplete', '==', true),
-    );
-
+        if (!user) return;
+    
+        const fetchUsers = async () => {
+          const usersRef = collection(db, 'users');
+          const usersSnapshot = await getDocs(usersRef);
+          const usersMap: Record<string, User> = {};
+          usersSnapshot.forEach((doc) => {
+            usersMap[doc.id] = { id: doc.id, ...doc.data() } as User;
+          });
+          setUsers(usersMap);
+        };
+    
+        fetchUsers();
+    
+        const q = query(
+          collection(db, 'polls'),
+          where('isActive', '==', false),
+          where('isComplete', '==', true),
+        );
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const pollsList: Poll[] = [];
       snapshot.forEach((doc) => {
         pollsList.push({ id: doc.id, ...doc.data() } as Poll);
       });
-      setPolls(pollsList);
+      const sortedPolls = pollsList.sort((a, b) => {
+        return b.createdAt.toMillis() - a.createdAt.toMillis();
+      });
+      setPolls(sortedPolls);
       setLoading(false);
     });
-
+    
     return () => unsubscribe();
   }, [user]);
 
@@ -150,6 +165,7 @@ export default function CompletedPollsScreen() {
       Alert.alert('Error', 'Failed to update poll');
     }
   };
+    const [users, setUsers] = useState<Record<string, User>>({});
 
   const getTimeLeft = (endsAt: Timestamp) => {
     const end = endsAt.toDate().getTime();
@@ -210,7 +226,8 @@ export default function CompletedPollsScreen() {
             const hasUserVoted = hasVoted(poll);
             const isActive = poll.endsAt.toDate().getTime() > new Date().getTime();
             const canEdit = user?.id === poll.createdBy || user?.role === 'admin';
-
+            const voters = poll.options.flatMap(option => option.votes);
+            const uniqueVoters = [...new Set(voters)];
             return (
               <View key={poll.id} style={styles.pollCard}>
                 <View style={styles.pollHeader}>
@@ -261,48 +278,18 @@ export default function CompletedPollsScreen() {
                     </View>
                   </View>
                 </View>
-
-                <View style={styles.options}>
-                  {poll.options.map((option) => {
-                    const percentage = getVotePercentage(option.votes.length, totalVotes);
-                    const isSelected = userVote?.id === option.id;
-
-                    return (
-                      <TouchableOpacity
-                        key={option.id}
-                        style={[
-                          styles.option,
-                          isSelected && styles.selectedOption,
-                          !isActive && styles.inactiveOption
-                        ]}
-                        onPress={() => isActive && handleVote(option.id, poll)}
-                        disabled={!isActive}
-                      >
-                        <View style={styles.optionContent}>
-                          <Text style={[
-                            styles.optionText,
-                            isSelected && styles.selectedOptionText
-                          ]}>
-                            {option.text}
-                          </Text>
-                          {isSelected && (
-                            <CheckCircle2 size={20} color="#3dd9d6" />
-                          )}
-                        </View>
-                        {(hasUserVoted || !isActive) && (
-                          <View style={styles.resultBar}>
-                            <View 
-                              style={[
-                                styles.resultFill,
-                                { width: `${percentage}%` }
-                              ]} 
-                            />
-                            <Text style={styles.percentage}>{percentage}%</Text>
-                          </View>
-                        )}
-                      </TouchableOpacity>
-                    );
-                  })}
+                <View style={styles.votersList}>
+                  {uniqueVoters.length > 0 ? (
+                    uniqueVoters.map(voterId => (
+                      <View key={voterId} style={styles.voterCard}>
+                        <Text style={styles.voterName}>
+                          {users[voterId]?.fullName || 'Unknown User'}
+                        </Text>
+                      </View>
+                    ))
+                  ) : (
+                    <Text style={styles.noVoters}>No votes yet</Text>
+                  )}
                 </View>
 
                 <View style={styles.pollFooter}>
@@ -488,4 +475,25 @@ const styles = StyleSheet.create({
   cancelButton: {
     backgroundColor: 'rgba(255, 107, 74, 0.1)',
   },
+  votersList: {
+    marginTop: 16,
+    gap: 8,
+  },
+  voterName: {
+    color: '#ffffff',
+    fontSize: 16,
+    marginLeft: 16,
+  },
+  noVoters: {
+    color: 'rgba(255, 255, 255, 0.6)',
+    fontStyle: 'italic',
+    textAlign: 'center',
+    marginTop: 16,
+  },
+  voterCard: {
+    backgroundColor: 'rgba(61, 217, 214, 0.1)',
+    borderRadius: 8,
+    padding: 12,
+  },
 });
+
