@@ -1,21 +1,23 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { StyleSheet, View, Text, Image, Platform } from 'react-native';
 import { router } from 'expo-router';
 import { signInWithEmailAndPassword } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { auth, db } from '../utils/firebase';
 import { Input } from '../components/Input';
 import { Button } from '../components/Button';
 import { User } from '../types/user';
 import { useUser } from '../context/UserContext';
 import { KeyboardAvoidingWrapper } from '../components/KeyboardAvoidingWrapper';
+import { registerForPushNotificationsAsync } from '../utils/notifications';
 
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const { setUser } = useUser();
+  const { user, setUser } = useUser();
+
 
   const handleLogin = async () => {
     try {
@@ -34,6 +36,23 @@ export default function Login() {
 
       setUser(userData);
       router.replace('/(tabs)');
+
+      registerForPushNotificationsAsync().then(async (token) => {
+        console.log("Token received in login.tsx:", token); // Add this line
+        console.log("user id:", userData?.id);
+        if (token && userData) {
+          console.log("Updating user document with FCM token"); 
+          try {
+            console.log("user id:", userData.id);
+            await updateDoc(doc(db, 'users', userData.id), { fcmToken: token });
+            console.log("updateDoc is called");
+        } catch (error) {
+            console.error("Error updating user document:", error);
+        }
+        } else{
+          console.log("Token or user is undefined"); // Add this line
+        }
+      }); 
     } catch (err) {
       console.error('Login error:', err);
       setError('Invalid email or password');
