@@ -19,6 +19,7 @@ export default function NewChat() {
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [groupNameExists, setGroupNameExists] = useState(false);
 
   useEffect(() => {
     fetchUsers();
@@ -59,26 +60,97 @@ export default function NewChat() {
     );
   };
 
+  const checkGroupNameExists = async (name: string) => {
+    if (!name.trim()) {
+      setGroupNameExists(false);
+      return;
+    }
+  
+    try {
+      const chatsRef = collection(db, 'chats');
+      const q = query(
+        chatsRef,
+        where('type', '==', 'group'),
+        where('name', '==', name.trim())
+      );
+      const querySnapshot = await getDocs(q);
+  
+      setGroupNameExists(!querySnapshot.empty);
+    } catch (error) {
+      console.error('Error checking group name:', error);
+    }
+  };
+  
+
+  // const createChat = async () => {
+  //   if (!currentUser || selectedUsers.length === 0) return;
+
+  //   try {
+  //     setCreating(true);
+
+  //     const chatData = {
+  //       type: isGroupChat ? 'group' : 'direct',
+  //       participants: [currentUser.id, ...selectedUsers],
+  //       createdAt: new Date().toISOString(),
+  //       updatedAt: new Date().toISOString(),
+  //       ...(isGroupChat ? { name: groupName } : {}),
+  //     };
+
+  //     const chatRef = await addDoc(collection(db, 'chats'), chatData);
+  //     router.push(`/chat/${chatRef.id}`);
+  //   } catch (error) {
+  //     console.error('Error creating chat:', error);
+  //   }
+  // };
+
   const createChat = async () => {
     if (!currentUser || selectedUsers.length === 0) return;
-
+  
     try {
       setCreating(true);
-
+  
+      const participants = [currentUser.id, ...selectedUsers].sort(); // sorted array
+  
+      if (!isGroupChat) {
+        // For direct chat, check if a chat with same 2 users already exists
+        const chatsRef = collection(db, 'chats');
+        const q = query(
+          chatsRef,
+          where('type', '==', 'direct'),
+          where('participants', 'array-contains', currentUser.id)
+        );
+  
+        const querySnapshot = await getDocs(q);
+  
+        for (const doc of querySnapshot.docs) {
+          const chatData = doc.data();
+          if (chatData.participants.length === 2 && chatData.participants.includes(selectedUsers[0])) {
+            console.log('Existing chat found:', doc.id);
+            router.push(`/chat/${doc.id}`);
+            setCreating(false);
+            return;
+          }
+        }
+      }
+  
+      // No existing chat found, create a new one
       const chatData = {
         type: isGroupChat ? 'group' : 'direct',
-        participants: [currentUser.id, ...selectedUsers],
+        participants: participants,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         ...(isGroupChat ? { name: groupName } : {}),
       };
-
+  
       const chatRef = await addDoc(collection(db, 'chats'), chatData);
       router.push(`/chat/${chatRef.id}`);
     } catch (error) {
       console.error('Error creating chat:', error);
+    } finally {
+      setCreating(false);
     }
   };
+  
 
   const filteredUsers = users.filter(user =>
     user.fullName.toLowerCase().includes(searchQuery.toLowerCase())
@@ -146,12 +218,21 @@ export default function NewChat() {
             <TextInput
               style={styles.groupNameInput}
               value={groupName}
-              onChangeText={setGroupName}
+              //onChangeText={setGroupName}
+              onChangeText={(text) => {
+                setGroupName(text);
+                checkGroupNameExists(text);
+              }}
               placeholder="Enter group name..."
               placeholderTextColor="rgba(255, 255, 255, 0.5)"
               returnKeyType="done"
               onSubmitEditing={Keyboard.dismiss}
             />
+            {groupNameExists && (
+  <Text style={styles.warningText}>
+    A group with this name already exists.
+  </Text>
+)}
           </View>
         )}
 
@@ -294,5 +375,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#243c44',
     borderTopWidth: 1,
     borderTopColor: 'rgba(61, 217, 214, 0.1)',
+  },
+  warningText: {
+    color: '#ff6b6b', // a soft red, not too aggressive
+    marginTop: 8,
+    marginLeft: 4,
+    fontSize: 14,
+    fontWeight: '500',
+    opacity: 0.8,
   },
 });

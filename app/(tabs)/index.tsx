@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { StyleSheet, View, Text, ScrollView, TextInput, TouchableOpacity, Alert, Image } from 'react-native';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { StyleSheet, View, Text, ScrollView, TextInput, TouchableOpacity, Alert, Image, AppState } from 'react-native';
 import { doc, getDoc, collection, query, where, getDocs, orderBy, onSnapshot, addDoc, deleteDoc } from 'firebase/firestore';
 import { useRouter } from 'expo-router';
 import { Send, Trash2, Cloud, CloudRain, Sun, Wind, CloudLightning, CloudSnow, CloudFog, Users, Calendar } from 'lucide-react-native';
@@ -9,6 +9,7 @@ import { Update } from '../types/update';
 import { Poll } from '../types/poll';
 import { KeyboardAvoidingWrapper } from '../components/KeyboardAvoidingWrapper';
 import * as Location from 'expo-location';
+import { useFocusEffect } from '@react-navigation/native';
 
 const motorcycleImages = [
   {
@@ -55,6 +56,14 @@ export default function MemberDashboard() {
   const [weatherError, setWeatherError] = useState<string | null>(null);
   const [activeRidePoll, setActiveRidePoll] = useState<Poll | null>(null);
   const [loadingPoll, setLoadingPoll] = useState(true);
+  const appState = useRef(AppState.currentState);
+
+
+useFocusEffect(
+  useCallback(() => {
+    fetchWeather();
+  }, [])
+);
 
   useEffect(() => {
     const fetchUserData = async () => {
@@ -108,44 +117,18 @@ export default function MemberDashboard() {
   }, [user]);
 
   useEffect(() => {
-    const fetchWeather = async () => {
-      try {
-        setWeatherLoading(true);
-        setWeatherError(null);
-
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== 'granted') {
-          setWeatherError('Location permission not granted');
-          setWeatherLoading(false);
-          return;
-        }
-
-        const location = await Location.getCurrentPositionAsync({});
-        const { latitude, longitude } = location.coords;
-
-        const response = await fetch(
-          `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,precipitation,weather_code,wind_speed_10m`
-        );
-
-        if (!response.ok) throw new Error('Weather data not available');
-
-        const data = await response.json();
-        setWeather({
-          temperature: Math.round(data.current.temperature_2m),
-          weatherCode: data.current.weather_code,
-          windSpeed: Math.round(data.current.wind_speed_10m),
-          humidity: data.current.relative_humidity_2m,
-          precipitation: data.current.precipitation
-        });
-      } catch (error) {
-        console.error('Error fetching weather:', error);
-        setWeatherError('Unable to fetch weather data');
-      } finally {
-        setWeatherLoading(false);
-      }
-    };
-
     fetchWeather();
+    // Also fetch when app comes back to foreground
+  const subscription = AppState.addEventListener('change', nextAppState => {
+    if (appState.current.match(/inactive|background/) && nextAppState === 'active') {
+      // App has come to foreground
+      fetchWeather();
+    }
+    appState.current = nextAppState;
+  });
+  return () => {
+    subscription.remove();
+  };
   }, []);
 
   useEffect(() => {
@@ -176,6 +159,44 @@ export default function MemberDashboard() {
 
     return () => unsubscribe();
   }, [user]);
+
+
+  const fetchWeather = async () => {
+    try {
+      setWeatherLoading(true);
+      setWeatherError(null);
+
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        setWeatherError('Location permission not granted');
+        setWeatherLoading(false);
+        return;
+      }
+
+      const location = await Location.getCurrentPositionAsync({});
+      const { latitude, longitude } = location.coords;
+
+      const response = await fetch(
+        `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,precipitation,weather_code,wind_speed_10m`
+      );
+
+      if (!response.ok) throw new Error('Weather data not available');
+
+      const data = await response.json();
+      setWeather({
+        temperature: Math.round(data.current.temperature_2m),
+        weatherCode: data.current.weather_code,
+        windSpeed: Math.round(data.current.wind_speed_10m),
+        humidity: data.current.relative_humidity_2m,
+        precipitation: data.current.precipitation
+      });
+    } catch (error) {
+      console.error('Error fetching weather:', error);
+      setWeatherError('Unable to fetch weather data');
+    } finally {
+      setWeatherLoading(false);
+    }
+  };
 
   const getWeatherCondition = (code: number) => {
     if (code === 0) return 'Clear sky';
