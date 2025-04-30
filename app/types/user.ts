@@ -17,3 +17,7 @@ export interface User {
   myRides?: string;
   rideCounter?: number;
 }
+
+export type UserWithVote = User & {
+  votedOptionText: string;
+};

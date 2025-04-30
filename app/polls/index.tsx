@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Alert, TextInput } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Alert, TextInput,Modal,FlatList,Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { collection, query, where, onSnapshot, doc, updateDoc, getDoc, increment } from 'firebase/firestore';
 import { Timer, Users, CheckCircle2, CreditCard as Edit2, Save, X, ListMinus } from 'lucide-react-native';
@@ -7,6 +7,8 @@ import { db } from '../utils/firebase';
 import { useUser } from '../context/UserContext';
 import { Poll } from '../types/poll';
 import { Timestamp } from "firebase/firestore"; 
+import { User, UserWithVote } from '../types/user';
+
 
 export default function PollsScreen() {
   const router = useRouter();
@@ -15,6 +17,9 @@ export default function PollsScreen() {
   const [loading, setLoading] = useState(true);
   const [editingPoll, setEditingPoll] = useState<string | null>(null);
   const [editedQuestion, setEditedQuestion] = useState('');
+  const [showMembers, setShowMembers] = useState(false);
+  //const [members, setMembers] = useState<User[]>([]);
+  const [members, setMembers] = useState<UserWithVote[]>([]);
 
   useEffect(() => {
     if (!user) return;
@@ -36,6 +41,53 @@ export default function PollsScreen() {
 
     return () => unsubscribe();
   }, [user]);
+
+  // useEffect(() => {
+  //   const getVotersFromPoll = async () => {
+  //     const voterIds = Array.from(
+  //       new Set(polls.flatMap(poll => poll.options.flatMap(option => option.votes || [])))
+  //     );
+  //     const userPromises = voterIds.map(async (id) => {
+  //       const userDoc = await getDoc(doc(db, "users", id));
+  //       return userDoc.exists() ? { id: id, ...userDoc.data() } as User : null;
+  //     });
+  
+  //     const users = (await Promise.all(userPromises)).filter(Boolean) as User[];
+  //     setMembers(users);
+  //   };
+  //   if (polls) getVotersFromPoll();
+  // }, [polls]);
+
+  useEffect(() => {
+    const getVotersFromPoll = async () => {
+      const voterMap: { [userId: string]: string } = {};
+      // Build a map from userId to their voted option text
+      polls.forEach(poll => {
+        poll.options.forEach(option => {
+          (option.votes || []).forEach(userId => {
+            voterMap[userId] = option.text;
+          });
+        });
+      });
+      const voterIds = Object.keys(voterMap);
+      const userPromises = voterIds.map(async (id) => {
+        const userDoc = await getDoc(doc(db, "users", id));
+        if (!userDoc.exists()) return null;
+        return {
+          id,
+          ...userDoc.data(),
+          votedOptionText: voterMap[id],
+        } as UserWithVote;
+      });
+      const users = (await Promise.all(userPromises)).filter(Boolean) as UserWithVote[];
+      setMembers(users);
+    };
+    if (polls.length > 0) {
+      getVotersFromPoll();
+    }
+  }, [polls]);
+
+
 
   const handleVote = async (optionId: string, poll: Poll) => {
         if (!user) return;
@@ -197,6 +249,9 @@ const getTimeLeft = (endsAt: Timestamp) => {
     return poll.options.reduce((sum, option) => sum + option.votes.length, 0);
   };
 
+
+
+
   const getVotePercentage = (votes: number, total: number) => {
     if (total === 0) return 0;
     return Math.round((votes / total) * 100);
@@ -209,6 +264,22 @@ const getTimeLeft = (endsAt: Timestamp) => {
       </View>
     );
   }
+
+    const renderMemberItem = ({ item }: { item: UserWithVote }) => (
+      <View style={styles.memberItem}>
+        <Image
+          source={{ uri: item.photoURL || 'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?w=800&auto=format&fit=crop&q=80' }}
+          style={styles.memberAvatar}
+        />
+        <View style={styles.memberInfo}>
+          <Text style={styles.memberName}>{item.fullName}</Text>
+          <Text style={styles.memberRole}>{item.role}</Text>
+          <Text style={styles.memberOption}>Option: {item.votedOptionText}</Text>
+        </View>
+      </View>
+    );
+
+  
 
   return (
     <View style={styles.container}>
@@ -275,8 +346,13 @@ const getTimeLeft = (endsAt: Timestamp) => {
                       <Text style={styles.metaText}>{getTimeLeft(poll.endsAt)}</Text>
                     </View>
                     <View style={styles.metaItem}>
+                      <TouchableOpacity
+                                style={styles.membersButton}
+                                onPress={() => setShowMembers(true)}
+                              >
                       <Users size={16} color="#3dd9d6" />
-                      <Text style={styles.metaText}>{totalVotes} votes</Text>
+                      <Text style={styles.metaText}> {totalVotes} votes</Text>
+                      </TouchableOpacity>
                     </View>
                   </View>
                 </View>
@@ -335,6 +411,36 @@ const getTimeLeft = (endsAt: Timestamp) => {
             );
           })
         )}
+
+        <Modal
+                visible={showMembers}
+                transparent
+                animationType="slide"
+                onRequestClose={() => setShowMembers(false)}
+              >
+                <View style={styles.modalContainer}>
+                  <View style={styles.modalContent}>
+                    <View style={styles.modalHeader}>
+                      <Text style={styles.modalTitle}>Poll Members</Text>
+                      <TouchableOpacity
+                        style={styles.closeButton}
+                        onPress={() => setShowMembers(false)}
+                      >
+                        <X size={24} color="#3dd9d6" />
+                      </TouchableOpacity>
+                    </View>
+                    <FlatList
+                      data={members}
+                      renderItem={renderMemberItem}
+                      keyExtractor={(item) => item.id}
+                      contentContainerStyle={styles.membersList}
+                    />
+                  </View>
+                </View>
+              </Modal>
+
+
+
       </ScrollView>
     </View>
   );
@@ -507,5 +613,77 @@ const styles = StyleSheet.create({
   },
   cancelButton: {
     backgroundColor: 'rgba(255, 107, 74, 0.1)',
+  },
+  membersButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(61, 217, 214, 0.1)',
+    padding: 8,
+    borderRadius: 20,
+    margin: 8,
+    alignSelf: 'center',
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#1a2f35',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '80%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(61, 217, 214, 0.1)',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#3dd9d6',
+  },
+  closeButton: {
+    padding: 4,
+  },
+  membersList: {
+    padding: 16,
+  },
+  memberItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#243c44',
+    padding: 12,
+    borderRadius: 12,
+    marginBottom: 8,
+  },
+  memberAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    marginRight: 12,
+  },
+  memberInfo: {
+    flex: 1,
+  },
+  memberName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#3dd9d6',
+    marginBottom: 2,
+  },
+  memberRole: {
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.7)',
+    textTransform: 'capitalize',
+  },
+  memberOption: {
+    fontSize: 14,
+    color: 'rgba(236, 78, 42, 0.86)',
+    textTransform: 'capitalize',
   },
 });
