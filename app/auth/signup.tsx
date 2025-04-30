@@ -14,6 +14,7 @@ export default function SignUp() {
     email: '',
     password: '',
     confirmPassword: '',
+    myRides: '',
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -38,12 +39,17 @@ export default function SignUp() {
         return;
       }
 
+      if (!formData.fullName || !formData.email || !formData.password || !formData.myRides) {
+        setError('All fields are required');
+        return;
+      }
+
       const userCredential = await createUserWithEmailAndPassword(
         auth,
         formData.email,
         formData.password
       );
-      
+
       const userDocRef = doc(db, 'users', userCredential.user.uid);
       await setDoc(userDocRef, {
         id: userCredential.user.uid,
@@ -56,7 +62,8 @@ export default function SignUp() {
         updatedAt: new Date().toISOString(),
         photoURL: null,
         bio: '',
-        rideCounter: 0
+        rideCounter: 0,
+        myRides: formData.myRides,
       });
 
       await auth.signOut();
@@ -125,6 +132,13 @@ export default function SignUp() {
                 onChangeText={(text) => setFormData({ ...formData, confirmPassword: text })}
                 placeholder="Confirm your password"
                 secureTextEntry
+              />
+
+              <Input
+                label="Rides I own"
+                value={formData.myRides}
+                onChangeText={(text) => setFormData({ ...formData, myRides: text })}
+                placeholder="Enter your rides or 'NA' if you don't own one"
               />
 
               {error ? <Text style={styles.error}>{error}</Text> : null}

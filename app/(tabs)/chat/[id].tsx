@@ -291,6 +291,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#243c44',
     borderTopWidth: 1,
     borderTopColor: 'rgba(61, 217, 214, 0.1)',
+    marginBottom: 26,
   },
   input: {
     flex: 1,
