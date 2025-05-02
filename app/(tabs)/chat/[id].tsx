@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
-import { StyleSheet, View, Text, TextInput, TouchableOpacity, FlatList, KeyboardAvoidingView, Platform, Image, Modal } from 'react-native';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { StyleSheet, View, Text, TextInput, TouchableOpacity, FlatList, KeyboardAvoidingView, Platform, Image, Modal, ViewToken } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { collection, query, orderBy, onSnapshot, addDoc, doc, getDoc, updateDoc } from 'firebase/firestore';
 import { Send, Users, X } from 'lucide-react-native';
@@ -18,6 +18,13 @@ export default function ChatRoom() {
   const [showMembers, setShowMembers] = useState(false);
   const [members, setMembers] = useState<User[]>([]);
   const flatListRef = useRef<FlatList>(null);
+  const readMessagesRef = useRef<Set<string>>(new Set());
+  const statusPriority: Record<string, number> = {
+    sent: 1,
+    delivered: 2,
+    read: 3,
+  };
+  const memberUnsubscribes = useRef<Record<string, () => void>>({});
 
   useEffect(() => {
     if (!id) return;
@@ -30,17 +37,44 @@ export default function ChatRoom() {
         setChat(chatData);
 
         // Fetch members if it's a group chat
-        if (chatData.type === 'group') {
-          const memberPromises = chatData.participants.map(async (participantId) => {
-            const userDoc = await getDoc(doc(db, 'users', participantId));
-            if (userDoc.exists()) {
-              return { id: userDoc.id, ...userDoc.data() } as User;
-            }
-            return null;
-          });
+        // if (chatData.type === 'group') {
 
-          const memberData = await Promise.all(memberPromises);
-          setMembers(memberData.filter((m): m is User => m !== null));
+
+        //   const memberPromises = chatData.participants.map(async (participantId) => {
+        //     const userDoc = await getDoc(doc(db, 'users', participantId));
+        //     if (userDoc.exists()) {
+        //       return { id: userDoc.id, ...userDoc.data() } as User;
+        //     }
+        //     return null;
+        //   });
+
+        //   const memberData = await Promise.all(memberPromises);
+        //   setMembers(memberData.filter((m): m is User => m !== null));
+        // }
+
+        if (chatData.type === 'group') {
+          // Clear any previous listeners
+          Object.values(memberUnsubscribes.current).forEach((unsub) => unsub());
+          memberUnsubscribes.current = {};
+        
+          const newMembers: Record<string, User> = {};
+        
+          chatData.participants.forEach((participantId) => {
+            const userRef = doc(db, 'users', participantId);
+            const unsubscribe = onSnapshot(userRef, (docSnap) => {
+              if (docSnap.exists()) {
+                const updatedUser = { id: docSnap.id, ...docSnap.data() } as User;
+                newMembers[docSnap.id] = updatedUser;
+                setMembers((prevMembers) => {
+                  const membersMap = Object.fromEntries(prevMembers.map((m) => [m.id, m]));
+                  membersMap[updatedUser.id] = updatedUser;
+                  return Object.values(membersMap);
+                });
+              }
+            });
+        
+            memberUnsubscribes.current[participantId] = unsubscribe;
+          });
         }
       }
       setLoading(false);
@@ -56,25 +90,96 @@ export default function ChatRoom() {
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const messageList: Message[] = [];
-      snapshot.forEach((doc) => {
-        messageList.push({ id: doc.id, ...doc.data() } as Message);
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data() as Omit<Message, 'id'>;
+
+
+        const existing = messages.find((m) => m.id === docSnap.id);
+        const incomingStatusMap = data.statusMap || {};
+        let mergedStatusMap = { ...incomingStatusMap };
+        if (existing && existing.statusMap) {
+          for (const [uid, oldStatus] of Object.entries(existing.statusMap)) {
+            const currentStatus = incomingStatusMap[uid] || 'sent';
+            if (statusPriority[oldStatus] > statusPriority[currentStatus]) {
+              mergedStatusMap[uid] = oldStatus;
+            }
+          }
+        }
+
+        const msg: Message = {
+          id: docSnap.id,
+          ...data,
+          statusMap: mergedStatusMap,
+        };
+
+        messageList.push(msg);
+        if (user?.id && msg.senderId !== user.id) {
+          // If sender is not the current user and the message hasn't been delivered yet.
+          if (!msg.statusMap || msg.statusMap[user.id] !== 'delivered') {
+            const messageRef = doc(db, 'chats', id as string, 'messages', docSnap.id);
+            updateDoc(messageRef, {
+              [`statusMap.${user.id}`]: 'delivered',
+            }).catch((err) => console.error('Failed to update statusMap:', err));
+          }
+        } else if (msg.senderId === user?.id && msg.statusMap) {
+          // Handle sender's message status updates here if needed
+          if (!msg.statusMap[user.id]) {
+            const messageRef = doc(db, 'chats', id as string, 'messages', docSnap.id);
+            updateDoc(messageRef, {
+              [`statusMap.${user.id}`]: 'sent',
+            }).catch((err) => console.error('Failed to update sender status:', err));
+          }
+        }
+
       });
       setMessages(messageList);
     });
 
-    return () => unsubscribe();
+    return () => {unsubscribe();Object.values(memberUnsubscribes.current).forEach((unsub) => unsub());}
   }, [id]);
+
+  const onViewableItemsChanged = useCallback(
+    ({ viewableItems }: { viewableItems: Array<ViewToken> }) => {
+      if (!user?.id) return;
+
+      viewableItems.forEach(({ item }) => {
+        const msg = item as Message;
+
+        const alreadyMarked = readMessagesRef.current.has(msg.id);
+        const shouldMarkAsRead =
+          msg.senderId !== user.id &&
+          msg.statusMap?.[user.id] !== 'read' &&
+          !alreadyMarked;
+
+        if (shouldMarkAsRead) {
+          const messageRef = doc(db, 'chats', id as string, 'messages', msg.id);
+          updateDoc(messageRef, {
+            [`statusMap.${user.id}`]: 'read',
+          })
+            .then(() => {
+              readMessagesRef.current.add(msg.id);
+            })
+            .catch((err) => console.error('Failed to update message to read:', err));
+        }
+      });
+    },
+    [user?.id, id]
+  );
 
   const sendMessage = async () => {
     if (!newMessage.trim() || !user || !chat) return;
 
     const messageData: Omit<Message, 'id'> = {
       content: newMessage.trim(),
-      senderId: user.id,
-      senderName: user.fullName,
-      senderPhotoURL: user.photoURL,
+      senderId: user?.id,
+      senderName: user?.fullName,
+      senderPhotoURL: user?.photoURL,
       timestamp: new Date().toISOString(),
       type: 'text',
+      statusMap: {
+        [user.id]: 'sent' // only sender has it as 'sent' initially
+      },
+      seenBy: []
     };
 
     try {
@@ -88,7 +193,7 @@ export default function ChatRoom() {
       });
 
       setNewMessage('');
-      
+
       // Scroll to bottom
       flatListRef.current?.scrollToEnd();
     } catch (error) {
@@ -98,6 +203,35 @@ export default function ChatRoom() {
 
   const renderMessage = ({ item }: { item: Message }) => {
     const isOwnMessage = item.senderId === user?.id;
+    //const userStatus = user?.id && item.statusMap ? item.statusMap[user.id] : undefined;
+    let userStatus: string | undefined = undefined;
+
+
+    if (isOwnMessage && item.statusMap) {
+
+      const otherStatuses = Object.entries(item.statusMap)
+        .filter(([uid]) => uid !== user?.id)  // ignore self
+        .map(([, status]) => status);
+
+
+      if (otherStatuses.some(status => status === 'read')) {
+        userStatus = 'read';
+      } else if (otherStatuses.some(status => status === 'delivered')) {
+        userStatus = 'delivered';
+      } else if (otherStatuses.some(status => status === 'sent')) {
+        userStatus = 'sent';
+      } else {
+        userStatus = undefined;
+      }
+
+      const highestStatus = otherStatuses.reduce((highest, current) => {
+        return statusPriority[current] > statusPriority[highest] ? current : highest;
+      }, 'sent');
+
+      userStatus = highestStatus;
+    } else {
+      userStatus = item.statusMap?.[user?.id ?? ''];
+    }
 
     return (
       <View style={[
@@ -126,6 +260,16 @@ export default function ChatRoom() {
           <Text style={styles.timestamp}>
             {new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
           </Text>
+          {/* Updated message status rendering */}
+          {isOwnMessage && (
+            <Text style={styles.messageStatus}>
+              {userStatus === 'read'
+                ? 'Delivered'
+                : userStatus === 'delivered'
+                  ? 'Read'
+                  : 'Sent'}
+            </Text>
+          )}
         </View>
       </View>
     );
@@ -151,10 +295,12 @@ export default function ChatRoom() {
       </View>
     );
   }
-
+  const viewabilityConfig = {
+    itemVisiblePercentThreshold: 80, // only mark as read if 80% visible
+  };
   return (
-    <KeyboardAvoidingView 
-      style={styles.container} 
+    <KeyboardAvoidingView
+      style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
     >
@@ -177,7 +323,11 @@ export default function ChatRoom() {
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.messagesList}
         onContentSizeChange={() => flatListRef.current?.scrollToEnd()}
+        onViewableItemsChanged={onViewableItemsChanged}
+        viewabilityConfig={viewabilityConfig}
       />
+
+
 
       <View style={styles.inputContainer}>
         <TextInput
@@ -188,11 +338,11 @@ export default function ChatRoom() {
           placeholderTextColor="rgba(255, 255, 255, 0.5)"
           multiline
         />
-        <TouchableOpacity 
+        <TouchableOpacity
           style={[
             styles.sendButton,
             !newMessage.trim() && styles.sendButtonDisabled
-          ]} 
+          ]}
           onPress={sendMessage}
           disabled={!newMessage.trim()}
         >
@@ -391,5 +541,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: 'rgba(255, 255, 255, 0.7)',
     textTransform: 'capitalize',
+  },
+  messageStatus: {
+    fontSize: 8,  // Adjust the font size as needed
+    color: 'gray', // Adjust the color as needed
+    marginTop: 5,  // Add some space if needed
   },
 });

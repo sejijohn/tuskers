@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { StyleSheet, View, Text, FlatList, TouchableOpacity, Image, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { collection, query, where, onSnapshot, orderBy, getDocs, deleteDoc, doc, addDoc, updateDoc, getDoc, increment } from 'firebase/firestore';
@@ -9,6 +9,7 @@ import { Chat } from '../../types/chat';
 import { User } from '../../types/user';
 import { Poll } from '../../types/poll';
 import { Button } from '../../components/Button';
+import { useFocusEffect } from '@react-navigation/native';
 
 export default function ChatList() {
   const router = useRouter();
@@ -20,22 +21,16 @@ export default function ChatList() {
   const [activePoll, setActivePoll] = useState<Poll | null>(null);
   const [loadingPoll, setLoadingPoll] = useState(true);
 
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchUsers();
+    }, [])
+  );
+
   useEffect(() => {
     if (!user) return;
-
-    // Fetch all users first
-    const fetchUsers = async () => {
-      const usersRef = collection(db, 'users');
-      const usersSnapshot = await getDocs(usersRef);
-      const usersMap: Record<string, User> = {};
-      usersSnapshot.forEach((doc) => {
-        usersMap[doc.id] = { id: doc.id, ...doc.data() } as User;
-      });
-      setUsers(usersMap);
-    };
-
     fetchUsers();
-
     // Subscribe to active poll
     const pollQuery = query(
       collection(db, 'polls'),
@@ -92,6 +87,17 @@ export default function ChatList() {
       unsubscribeChats();// Unsubscribe from chats listener
     };
   }, [user]);
+
+   // Fetch all users first
+   const fetchUsers = async () => {
+    const usersRef = collection(db, 'users');
+    const usersSnapshot = await getDocs(usersRef);
+    const usersMap: Record<string, User> = {};
+    usersSnapshot.forEach((doc) => {
+      usersMap[doc.id] = { id: doc.id, ...doc.data() } as User;
+    });
+    setUsers(usersMap);
+  };
 
   const getChatTitle = (chat: Chat) => {
     if (chat.type === 'group') return chat.name;
