@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { StyleSheet, View, Text, ScrollView, RefreshControl, Image } from 'react-native';
+import { StyleSheet, View, Text, ScrollView, RefreshControl, Image, TouchableOpacity, Linking } from 'react-native';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { db } from '../../utils/firebase';
 import { User } from '../../types/user';
@@ -135,10 +135,16 @@ export default function MembersScreen() {
                   </View>
                 )}
                 {!!member.phoneNumber && (
+                  <TouchableOpacity
+                  onPress={() => {
+                    Linking.openURL(`tel:${member.phoneNumber}`);
+                  }}
+                >
                   <View style={styles.detailRow}>
                     <Phone size={16} color="#ffffff" />
                     <Text style={styles.detailText}>{member.phoneNumber}</Text>
                   </View>
+                  </TouchableOpacity>
                 )}
                 {currentUser.role === "admin" && (
                   <View style={styles.detailRow}>
