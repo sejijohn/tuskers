@@ -1,13 +1,15 @@
-import { useState, useEffect } from 'react';
-import { StyleSheet, View, Text, ScrollView, TextInput, TouchableOpacity, Alert, Image } from 'react-native';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { StyleSheet, View, Text, ScrollView, TextInput, TouchableOpacity, Alert, Image, AppState } from 'react-native';
 import { doc, getDoc, collection, query, where, getDocs, orderBy, onSnapshot, addDoc, deleteDoc } from 'firebase/firestore';
 import { useRouter } from 'expo-router';
+import { Send, Trash2, Cloud, CloudRain, Sun, Wind, CloudLightning, CloudSnow, CloudFog, Users, Calendar } from 'lucide-react-native';
 import { auth, db } from '../utils/firebase';
 import { User } from '../types/user';
 import { Update } from '../types/update';
+import { Poll } from '../types/poll';
 import { KeyboardAvoidingWrapper } from '../components/KeyboardAvoidingWrapper';
-import { Send, Trash2, Cloud, CloudRain, Sun, Wind, CloudLightning, CloudSnow, CloudFog } from 'lucide-react-native';
 import * as Location from 'expo-location';
+import { useFocusEffect } from '@react-navigation/native';
 
 const motorcycleImages = [
   {
@@ -36,7 +38,6 @@ interface Weather {
   precipitation: number;
 }
 
-// Unit conversion functions
 const celsiusToFahrenheit = (celsius: number) => Math.round(celsius * 9/5 + 32);
 const kmhToMph = (kmh: number) => Math.round(kmh * 0.621371);
 const mmToInches = (mm: number) => Number((mm * 0.0393701).toFixed(2));
@@ -53,6 +54,16 @@ export default function MemberDashboard() {
   const [weather, setWeather] = useState<Weather | null>(null);
   const [weatherLoading, setWeatherLoading] = useState(true);
   const [weatherError, setWeatherError] = useState<string | null>(null);
+  const [activeRidePoll, setActiveRidePoll] = useState<Poll | null>(null);
+  const [loadingPoll, setLoadingPoll] = useState(true);
+  const appState = useRef(AppState.currentState);
+
+
+useFocusEffect(
+  useCallback(() => {
+    fetchWeather();
+  }, [])
+);
 
   useEffect(() => {
     const fetchUserData = async () => {
@@ -87,7 +98,6 @@ export default function MemberDashboard() {
   useEffect(() => {
     if (!user) return;
 
-    // Subscribe to updates
     const updatesQuery = query(
       collection(db, 'updates'),
       orderBy('createdAt', 'desc')
@@ -106,56 +116,89 @@ export default function MemberDashboard() {
     };
   }, [user]);
 
-
-
-
-
-
   useEffect(() => {
-    const fetchWeather = async () => {
-      try {
-        setWeatherLoading(true);
-        setWeatherError(null);
-
-        // Request location permissions
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== 'granted') {
-          setWeatherError('Location permission not granted');
-          setWeatherLoading(false);
-          return;
-        }
-
-        // Get current location
-        const location = await Location.getCurrentPositionAsync({});
-        const { latitude, longitude } = location.coords;
-
-        const response = await fetch(
-          `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,precipitation,weather_code,wind_speed_10m`
-        );
-
-        if (!response.ok) throw new Error('Weather data not available');
-
-        const data = await response.json();
-        setWeather({
-          temperature: Math.round(data.current.temperature_2m),
-          weatherCode: data.current.weather_code,
-          windSpeed: Math.round(data.current.wind_speed_10m),
-          humidity: data.current.relative_humidity_2m,
-          precipitation: data.current.precipitation
-        });
-      } catch (error) {
-        console.error('Error fetching weather:', error);
-        setWeatherError('Unable to fetch weather data');
-      } finally {
-        setWeatherLoading(false);
-      }
-    };
-
     fetchWeather();
+    // Also fetch when app comes back to foreground
+  const subscription = AppState.addEventListener('change', nextAppState => {
+    if (appState.current.match(/inactive|background/) && nextAppState === 'active') {
+      // App has come to foreground
+      fetchWeather();
+    }
+    appState.current = nextAppState;
+  });
+  return () => {
+    subscription.remove();
+  };
   }, []);
 
+  useEffect(() => {
+    if (!user) return;
+
+    const pollQuery = query(
+      collection(db, 'polls'),
+      where('isActive', '==', true),
+      where('isComplete', '==', false),
+      where('ridePoll', '==', true)
+    );
+
+    const unsubscribe = onSnapshot(pollQuery, (snapshot) => {
+      if (!snapshot.empty) {
+        const pollData = snapshot.docs[0].data() as Poll;
+        //const hasEnded = new Date(pollData.endsAt).getTime() <= new Date().getTime();
+        const hasEnded = pollData.endsAt.toDate().getTime() <= new Date().getTime();
+        if (!hasEnded) {
+        setActiveRidePoll({ ...pollData, id: snapshot.docs[0].id });
+      } else {
+        setActiveRidePoll(null);
+      }
+      } else {
+        setActiveRidePoll(null);
+      }
+      setLoadingPoll(false);
+    });
+
+    return () => unsubscribe();
+  }, [user]);
+
+
+  const fetchWeather = async () => {
+    try {
+      setWeatherLoading(true);
+      setWeatherError(null);
+
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        setWeatherError('Location permission not granted');
+        setWeatherLoading(false);
+        return;
+      }
+
+      const location = await Location.getCurrentPositionAsync({});
+      const { latitude, longitude } = location.coords;
+
+      const response = await fetch(
+        `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,precipitation,weather_code,wind_speed_10m`
+      );
+
+      if (!response.ok) throw new Error('Weather data not available');
+
+      const data = await response.json();
+      setWeather({
+        temperature: Math.round(data.current.temperature_2m),
+        weatherCode: data.current.weather_code,
+        windSpeed: Math.round(data.current.wind_speed_10m),
+        humidity: data.current.relative_humidity_2m,
+        precipitation: data.current.precipitation
+      });
+    } catch (error) {
+      console.error('Error fetching weather:', error);
+      setWeatherError('Unable to fetch weather data');
+    } finally {
+      setWeatherLoading(false);
+    }
+  };
+
   const getWeatherCondition = (code: number) => {
-    // WMO Weather interpretation codes (WW)
     if (code === 0) return 'Clear sky';
     if (code === 1) return 'Mainly clear';
     if (code === 2) return 'Partly cloudy';
@@ -212,27 +255,6 @@ export default function MemberDashboard() {
     };
   };
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
   const handlePostUpdate = async () => {
     if (!user || !newUpdate.trim()) return;
 
@@ -269,7 +291,6 @@ export default function MemberDashboard() {
     }
   };
 
-
   const renderWeatherIcon = (code: number) => {
     const condition = getWeatherCondition(code).toLowerCase();
     
@@ -289,6 +310,20 @@ export default function MemberDashboard() {
       return <Sun size={24} color="#3dd9d6" />;
     }
     return <Cloud size={24} color="#3dd9d6" />;
+  };
+
+  const getTotalVotes = (poll: Poll) => {
+    return poll.options.reduce((sum, option) => sum + option.votes.length, 0);
+  };
+
+  const hasVoted = (poll: Poll) => {
+    return poll.options.some(option => option.votes.includes(user?.id || ''));
+  };
+
+  const getWinningOption = (poll: Poll) => {
+    return poll.options.reduce((prev, current) => 
+      current.votes.length > prev.votes.length ? current : prev
+    );
   };
 
   if (loading) {
@@ -332,8 +367,6 @@ export default function MemberDashboard() {
               </View>
             </View>
           </View>
-
-
 
           {weatherLoading ? (
             <View style={styles.weatherCard}>
@@ -394,10 +427,55 @@ export default function MemberDashboard() {
             </View>
           )}
 
+          {!loadingPoll && activeRidePoll && (
+            <View style={styles.card}>
+              <View style={styles.cardHeader}>
+                <Text style={styles.cardTitle}>Upcoming Ride</Text>
+                <TouchableOpacity
+                  style={styles.viewPollButton}
+                  onPress={() => router.push('/polls')}
+                >
+                  <Text style={styles.viewPollText}>View Poll</Text>
+                </TouchableOpacity>
+              </View>
 
+              <View style={styles.rideInfo}>
+                <Text style={styles.rideQuestion}>{activeRidePoll.question}</Text>
+                
+                <View style={styles.rideStats}>
+                  <View style={styles.rideStat}>
+                    <Users size={16} color="#3dd9d6" />
+                    <Text style={styles.rideStatText}>
+                      {getTotalVotes(activeRidePoll)} votes
+                    </Text>
+                  </View>
+                  {hasVoted(activeRidePoll) ? (
+                    <View style={styles.votedBadge}>
+                      <Text style={styles.votedText}>You've voted</Text>
+                    </View>
+                  ) : (
+                    <TouchableOpacity
+                      style={styles.voteButton}
+                      onPress={() => router.push('/polls')}
+                    >
+                      <Text style={styles.voteButtonText}>Cast your vote</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
 
-
-
+                {getTotalVotes(activeRidePoll) > 0 && (
+                  <View style={styles.leadingOption}>
+                    <Text style={styles.leadingText}>
+                      Leading option: {getWinningOption(activeRidePoll).text}
+                    </Text>
+                    <Text style={styles.votesText}>
+                      with {getWinningOption(activeRidePoll).votes.length} votes
+                    </Text>
+                  </View>
+                )}
+              </View>
+            </View>
+          )}
 
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Recent Updates</Text>
@@ -533,6 +611,67 @@ const styles = StyleSheet.create({
     backgroundColor: '#3dd9d6',
     width: 24,
   },
+  weatherCard: {
+    backgroundColor: '#243c44',
+    borderRadius: 12,
+    padding: 16,
+    margin: 16,
+    marginTop: 8,
+  },
+  weatherHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  weatherMain: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  temperature: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: '#3dd9d6',
+  },
+  weatherCondition: {
+    fontSize: 18,
+    color: '#ffffff',
+    opacity: 0.8,
+  },
+  weatherDetails: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginBottom: 16,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: 'rgba(61, 217, 214, 0.1)',
+  },
+  weatherDetail: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  weatherDetailText: {
+    fontSize: 14,
+    color: '#ffffff',
+    opacity: 0.8,
+  },
+  ridingCondition: {
+    alignItems: 'center',
+  },
+  ridingStatus: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  ridingMessage: {
+    fontSize: 14,
+    color: '#ffffff',
+    opacity: 0.8,
+    textAlign: 'center',
+  },
   card: {
     backgroundColor: '#243c44',
     borderRadius: 12,
@@ -540,11 +679,91 @@ const styles = StyleSheet.create({
     margin: 16,
     marginTop: 8,
   },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
   cardTitle: {
     fontSize: 20,
     fontWeight: 'bold',
     color: '#3dd9d6',
     marginBottom: 16,
+  },
+  viewPollButton: {
+    backgroundColor: 'rgba(61, 217, 214, 0.1)',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+  },
+  viewPollText: {
+    color: '#3dd9d6',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  rideInfo: {
+    backgroundColor: 'rgba(61, 217, 214, 0.1)',
+    borderRadius: 12,
+    padding: 16,
+  },
+  rideQuestion: {
+    fontSize: 18,
+    color: '#ffffff',
+    marginBottom: 12,
+  },
+  rideStats: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  rideStat: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  rideStatText: {
+    color: '#ffffff',
+    opacity: 0.8,
+    fontSize: 14,
+  },
+  votedBadge: {
+    backgroundColor: 'rgba(61, 217, 214, 0.2)',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+  },
+  votedText: {
+    color: '#3dd9d6',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  voteButton: {
+    backgroundColor: '#3dd9d6',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+  },
+  voteButtonText: {
+    color: '#1a2f35',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  leadingOption: {
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(61, 217, 214, 0.2)',
+    paddingTop: 12,
+  },
+  leadingText: {
+    color: '#ffffff',
+    fontSize: 14,
+    marginBottom: 4,
+  },
+  votesText: {
+    color: '#3dd9d6',
+    fontSize: 14,
+    fontWeight: '500',
   },
   inputContainer: {
     flexDirection: 'row',
@@ -609,66 +828,5 @@ const styles = StyleSheet.create({
   },
   deleteButtonDisabled: {
     opacity: 0.5,
-  },
-  weatherCard: {
-    backgroundColor: '#243c44',
-    borderRadius: 12,
-    padding: 16,
-    margin: 16,
-    marginTop: 8,
-  },
-  weatherHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 16,
-  },
-  weatherMain: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  temperature: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#3dd9d6',
-  },
-  weatherCondition: {
-    fontSize: 18,
-    color: '#ffffff',
-    opacity: 0.8,
-  },
-  weatherDetails: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginBottom: 16,
-    paddingVertical: 12,
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: 'rgba(61, 217, 214, 0.1)',
-  },
-  weatherDetail: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  weatherDetailText: {
-    fontSize: 14,
-    color: '#ffffff',
-    opacity: 0.8,
-  },
-  ridingCondition: {
-    alignItems: 'center',
-  },
-  ridingStatus: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 4,
-  },
-  ridingMessage: {
-    fontSize: 14,
-    color: '#ffffff',
-    opacity: 0.8,
-    textAlign: 'center',
   },
 });

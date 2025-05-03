@@ -6,6 +6,10 @@ export interface Message {
   senderPhotoURL: string | null;
   timestamp: string;
   type: 'text' | 'image';
+  statusMap?: {
+    [userId: string]: 'sent' | 'delivered' | 'read';
+  };
+  seenBy?: string[]; // For group chat
 }
 
 export interface Chat {
@@ -17,3 +21,5 @@ export interface Chat {
   createdAt: string;
   updatedAt: string;
 }
+
+export type MessageStatus = 'sent' | 'delivered' | 'read';

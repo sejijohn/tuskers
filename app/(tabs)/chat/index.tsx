@@ -1,45 +1,79 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { StyleSheet, View, Text, FlatList, TouchableOpacity, Image, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
-import { collection, query, where, onSnapshot, orderBy, getDocs, deleteDoc, doc, addDoc } from 'firebase/firestore';
-import { MessageSquarePlus, Users, Trash2, Shield } from 'lucide-react-native';
+import { collection, query, where, onSnapshot, orderBy, getDocs, deleteDoc, doc, addDoc, updateDoc, getDoc, increment } from 'firebase/firestore';
+import { MessageSquarePlus, Users, Trash2, Shield, PlusCircle, BarChart as ChartBar, List } from 'lucide-react-native';
 import { db } from '../../utils/firebase';
 import { useUser } from '../../context/UserContext';
 import { Chat } from '../../types/chat';
 import { User } from '../../types/user';
+import { Poll } from '../../types/poll';
 import { Button } from '../../components/Button';
+import { useFocusEffect } from '@react-navigation/native';
 
 export default function ChatList() {
   const router = useRouter();
   const { user } = useUser();
-  const [chats, setChats] = useState<Chat[]>([]);
   const [users, setUsers] = useState<Record<string, User>>({});
+  const [chats, setChats] = useState<Chat[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [activePoll, setActivePoll] = useState<Poll | null>(null);
+  const [loadingPoll, setLoadingPoll] = useState(true);
+
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchUsers();
+    }, [])
+  );
 
   useEffect(() => {
     if (!user) return;
-
-    // Fetch all users first
-    const fetchUsers = async () => {
-      const usersRef = collection(db, 'users');
-      const usersSnapshot = await getDocs(usersRef);
-      const usersMap: Record<string, User> = {};
-      usersSnapshot.forEach((doc) => {
-        usersMap[doc.id] = { id: doc.id, ...doc.data() } as User;
-      });
-      setUsers(usersMap);
-    };
-
     fetchUsers();
+    // Subscribe to active poll
+    const pollQuery = query(
+      collection(db, 'polls'),
+      where('isActive', '==', true)
+    );
 
-    const q = query(
+    const unsubscribePoll = onSnapshot(pollQuery, async (snapshot) => {
+      if (!snapshot.empty) {
+        const pollDoc = snapshot.docs[0];
+        const pollData = pollDoc.data() as Poll;
+        const pollId = pollDoc.id;
+        const hasEnded = pollData.endsAt.toDate().getTime() <= new Date().getTime();
+
+        if (!hasEnded) {
+          setActivePoll({ ...pollData, id: pollId });
+        } else {
+          // If poll has ended, mark it as complete
+          await updateDoc(doc(db, 'polls', pollId), {
+            isActive: false,
+            isComplete: true
+          });
+          setActivePoll(null);
+        }
+        //   // If poll has ended, mark it as complete
+        //   await updateDoc(doc(db, 'polls', pollId), {
+        //     isActive: false,
+        //     isComplete: true
+        //   });
+        //   setActivePoll(null);
+        // }
+      } else {
+        setActivePoll(null);
+      }
+      setLoadingPoll(false);
+    });
+
+    const q = query( // Subscribe to changes in the 'chats' collection
       collection(db, 'chats'),
       where('participants', 'array-contains', user.id),
       orderBy('updatedAt', 'desc')
     );
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    const unsubscribeChats = onSnapshot(q, (snapshot) => {
       const chatList: Chat[] = [];
       snapshot.forEach((doc) => {
         chatList.push({ id: doc.id, ...doc.data() } as Chat);
@@ -48,8 +82,22 @@ export default function ChatList() {
       setLoading(false);
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribePoll(); 
+      unsubscribeChats();// Unsubscribe from chats listener
+    };
   }, [user]);
+
+   // Fetch all users first
+   const fetchUsers = async () => {
+    const usersRef = collection(db, 'users');
+    const usersSnapshot = await getDocs(usersRef);
+    const usersMap: Record<string, User> = {};
+    usersSnapshot.forEach((doc) => {
+      usersMap[doc.id] = { id: doc.id, ...doc.data() } as User;
+    });
+    setUsers(usersMap);
+  };
 
   const getChatTitle = (chat: Chat) => {
     if (chat.type === 'group') return chat.name;
@@ -93,6 +141,15 @@ export default function ChatList() {
         return;
       }
 
+      const existingChat = chats.find(
+        chat => chat.type === 'group' && chat.name === 'Admin Support'
+      );
+      if (existingChat) {
+        router.push(`/chat/${existingChat.id}`);
+        return;
+      } else {
+
+
       // Create a group chat with all admins
       const chatData = {
         type: 'group',
@@ -104,9 +161,82 @@ export default function ChatList() {
 
       const chatRef = await addDoc(collection(db, 'chats'), chatData);
       router.push(`/chat/${chatRef.id}`);
+
+    }
     } catch (error) {
       console.error('Error creating admin chat:', error);
       Alert.alert('Error', 'Failed to create admin chat. Please try again.');
+    }
+  };
+
+  const handleDeletePoll = async (pollId: string) => {
+    if (!user) return;
+
+    try {
+      const pollDoc = await getDoc(doc(db, 'polls', pollId));
+      if (!pollDoc.exists()) {
+        setActivePoll(null);
+        return;
+      }
+
+      const pollData = pollDoc.data() as Poll;
+      //const hasEnded = new Date(pollData.endsAt).getTime() <= new Date().getTime();
+      const hasEnded =
+  pollData.endsAt.toDate().getTime() <= new Date().getTime();
+
+      // Check permissions: allow if user is creator/admin or if poll has ended
+      if (!hasEnded && user.id !== pollData.createdBy && user.role !== 'admin') {
+        Alert.alert('Error', 'You do not have permission to delete this poll');
+        return;
+      }
+
+      Alert.alert(
+        'Delete Poll',
+        'Are you sure you want to delete this poll?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Delete',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                // Mark the poll as deleted
+                const updateData = {
+                  isActive: false,
+                  isComplete: hasEnded,
+                };
+                await updateDoc(doc(db, 'polls', pollId), {
+                  ...updateData
+                });
+                // If it's a ride poll, decrement the rideCounter for each user
+                if (pollData.ridePoll) {
+                  const joiningOption = pollData.options.find(option => option.text === "Yes, I am joining the ride.");
+                  if (joiningOption) {
+                    if(!pollData.isComplete){
+                      for (const userId of joiningOption.votes) {
+                        const userDocRef = doc(db, 'users', userId);
+                        const userDoc = await getDoc(userDocRef);
+                        if (userDoc.exists()) {
+                          const userData = userDoc.data() as User;
+                          if (userData.rideCounter && userData.rideCounter > 0) {
+                            await updateDoc(userDocRef, { rideCounter: increment(-1) });
+                          }
+                        }
+                      }
+                    } 
+                  }
+                }              
+              } catch (error) {
+                console.error('Error deleting poll:', error);
+                Alert.alert('Error', 'Failed to delete poll');
+              }
+            }
+          }
+        ]
+      );
+    } catch (error) {
+      console.error('Error handling poll deletion:', error);
+      Alert.alert('Error', 'Failed to delete poll');
     }
   };
 
@@ -147,7 +277,7 @@ export default function ChatList() {
         style={[
           styles.deleteButton,
           deleting === item.id && styles.deleteButtonDisabled
-        ]}
+        ]} 
         onPress={() => {
           Alert.alert(
             'Delete Chat',
@@ -172,11 +302,82 @@ export default function ChatList() {
     </TouchableOpacity>
   );
 
+  const renderActivePoll = () => {
+    if (!activePoll) return null;
+
+    const totalVotes = activePoll.options.reduce((sum, option) => sum + option.votes.length, 0);
+    const hasVoted = activePoll.options.some(option => option.votes.includes(user?.id || ''));
+    //const hasEnded = new Date(activePoll.endsAt).getTime() <= new Date().getTime();
+    const hasEnded = activePoll.endsAt.toDate().getTime() <= new Date().getTime();
+    const canDelete = hasEnded || user?.id === activePoll.createdBy || user?.role === 'admin';
+    console.log('canDelete:', canDelete);
+
+    return (
+      <View style={styles.pollContainer}>
+        <View style={styles.pollHeader}>
+          <View style={styles.pollTitleContainer}>
+            <ChartBar size={20} color="#3dd9d6" />
+            <Text style={styles.pollTitle}>Active Poll</Text>
+          </View>
+          {canDelete && (
+            <TouchableOpacity
+              onPress={() => handleDeletePoll(activePoll.id)}
+              style={styles.deletePollButton}
+            >
+              <Trash2 size={20} color="#FF6B4A" />
+            </TouchableOpacity>
+          )}
+        </View>
+        
+        <Text style={styles.pollQuestion}>{activePoll.question}</Text>
+        
+        <View style={styles.pollStats}>
+          <Text style={styles.pollVotes}>{totalVotes} votes</Text>
+          <Text style={styles.pollCreator}>by {activePoll.createdByName}</Text>
+        </View>
+
+        <TouchableOpacity
+          style={styles.viewPollButton}
+          onPress={() => router.push('/polls')}
+        >
+          <Text style={styles.viewPollText}>View Poll</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Chats</Text>
         <View style={styles.headerButtons}>
+          <TouchableOpacity
+            style={[styles.newChatButton, styles.pollButton, activePoll && styles.disabledButton]}
+            onPress={() => {
+              if (!activePoll) {
+                router.push('/polls/new');
+              }
+            }}
+            disabled={!!activePoll}
+          >
+            <PlusCircle size={24} color={activePoll ? '#aaa' : '#3dd9d6'} />
+            <Text style={[styles.pollButtonText, activePoll && styles.disabledText]}>
+              {activePoll ? 'Poll Active' : 'New Poll'}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.newChatButton, styles.pollButton]}
+            onPress={() => router.push('/polls/completed')}
+          >
+            <List size={24} color="#3dd9d6" />
+            <Text style={styles.pollButtonText}>
+              All Polls
+            </Text>
+          </TouchableOpacity>
+
+
+
+
           {user?.role === 'member' && (
             <TouchableOpacity
               style={[styles.newChatButton, styles.adminChatButton]}
@@ -194,35 +395,31 @@ export default function ChatList() {
         </View>
       </View>
 
-      {loading ? (
-        <View style={styles.centerContent}>
-          <Text style={styles.loadingText}>Loading chats...</Text>
-        </View>
-      ) : chats.length === 0 ? (
-        <View style={styles.centerContent}>
-          <Text style={styles.emptyText}>No chats yet</Text>
-          {user?.role === 'member' && (
-            <Button
-              title="Chat with Admins"
-              onPress={startAdminChat}
-              style={styles.adminButton}
-            />
-          )}
-          <TouchableOpacity
-            style={styles.startChatButton}
-            onPress={() => router.push('/chat/new')}
-          >
-            <Text style={styles.startChatText}>Start a new chat</Text>
-          </TouchableOpacity>
-        </View>
-      ) : (
-        <FlatList
-          data={chats}
-          renderItem={renderChatItem}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.listContent}
-        />
-      )}
+      <FlatList
+        data={chats}
+        renderItem={renderChatItem}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={styles.listContent}
+        ListHeaderComponent={renderActivePoll}
+        ListEmptyComponent={
+          <View style={styles.centerContent}>
+            <Text style={styles.emptyText}>No chats yet</Text>
+            {user?.role === 'member' && (
+              <Button
+                title="Chat with Admins"
+                onPress={startAdminChat}
+                style={styles.adminButton}
+              />
+            )}
+            <TouchableOpacity
+              style={styles.startChatButton}
+              onPress={() => router.push('/chat/new')}
+            >
+              <Text style={styles.startChatText}>Start a new chat</Text>
+            </TouchableOpacity>
+          </View>
+        }
+      />
     </View>
   );
 }
@@ -257,6 +454,17 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(61, 217, 214, 0.1)',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  pollButton: {
+    width: 'auto',
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    gap: 6,
+  },
+  pollButtonText: {
+    color: '#3dd9d6',
+    fontSize: 14,
+    fontWeight: '500',
   },
   adminChatButton: {
     backgroundColor: 'rgba(61, 217, 214, 0.2)',
@@ -330,14 +538,9 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   centerContent: {
-    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     padding: 20,
-  },
-  loadingText: {
-    fontSize: 16,
-    color: '#3dd9d6',
   },
   emptyText: {
     fontSize: 16,
@@ -361,5 +564,73 @@ const styles = StyleSheet.create({
     color: '#3dd9d6',
     fontSize: 16,
     fontWeight: '500',
+  },
+  pollContainer: {
+    backgroundColor: '#243c44',
+    borderRadius: 12,
+    padding: 16,
+    margin: 8,
+    marginTop: 0,
+  },
+  pollHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  pollTitleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  pollTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#3dd9d6',
+  },
+  deletePollButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 107, 74, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pollQuestion: {
+    fontSize: 18,
+    color: '#ffffff',
+    marginBottom: 12,
+  },
+  pollStats: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  pollVotes: {
+    fontSize: 14,
+    color: '#3dd9d6',
+  },
+  pollCreator: {
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.6)',
+  },
+  viewPollButton: {
+    backgroundColor: 'rgba(61, 217, 214, 0.1)',
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  viewPollText: {
+    color: '#3dd9d6',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  disabledButton: {
+    backgroundColor: '#2a3b3f',
+    opacity: 0.5,
+  },
+  disabledText: {
+    color: '#999',
   },
 });

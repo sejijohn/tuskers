@@ -18,7 +18,7 @@ export default function AdminScreen() {
   // Check if user is admin, if not redirect to home
   useEffect(() => {
     if (currentUser && currentUser.role !== 'admin') {
-      router.replace('/');
+      router.replace('/(tabs)/profile');
       return;
     }
   }, [currentUser]);
@@ -36,19 +36,19 @@ export default function AdminScreen() {
         where('deleted', '==', false),
         where('role', '==', 'member')
       );
-      
+
       const querySnapshot = await getDocs(q);
       const users: User[] = [];
-      
+
       querySnapshot.forEach((doc) => {
         users.push({ ...doc.data(), id: doc.id } as User);
       });
-      
+
       // Sort users by createdAt in descending order (most recent first)
       const sortedUsers = users.sort((a, b) => {
         return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
       });
-      
+
       setPendingUsers(sortedUsers);
     } catch (error) {
       console.error('Error fetching pending users:', error);
@@ -61,13 +61,13 @@ export default function AdminScreen() {
   const handleApprove = async (userId: string) => {
     try {
       setApprovalStatus(prev => ({ ...prev, [userId]: true }));
-      
+
       const userRef = doc(db, 'users', userId);
       await updateDoc(userRef, {
         approved: true,
         updatedAt: new Date().toISOString(),
       });
-      
+
       setPendingUsers((current) => current.filter(user => user.id !== userId));
       setApprovalStatus(prev => ({ ...prev, [userId]: false }));
     } catch (error) {
@@ -79,13 +79,13 @@ export default function AdminScreen() {
   const handleRemove = async (userId: string) => {
     try {
       setDeletionStatus(prev => ({ ...prev, [userId]: true }));
-      
+
       const userRef = doc(db, 'users', userId);
       await updateDoc(userRef, {
         deleted: true,
         updatedAt: new Date().toISOString(),
       });
-      
+
       setPendingUsers((current) => current.filter(user => user.id !== userId));
       setDeletionStatus(prev => ({ ...prev, [userId]: false }));
     } catch (error) {
@@ -136,6 +136,11 @@ export default function AdminScreen() {
               <View style={styles.userInfo}>
                 <Text style={styles.userName}>{user.fullName}</Text>
                 <Text style={styles.userEmail}>{user.email}</Text>
+                {user.myRides ? (
+                  <Text style={styles.userRides}>
+                    Rides: {user.myRides}
+                  </Text>
+                ) : null}
                 <Text style={styles.userDate}>
                   Joined: {new Date(user.createdAt).toLocaleDateString()}
                 </Text>
@@ -256,5 +261,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#ffffff',
     textAlign: 'center',
+  },
+  userRides: {
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.75)',
+    marginBottom: 2,
   },
 });

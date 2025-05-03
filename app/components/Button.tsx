@@ -6,7 +6,7 @@ interface ButtonProps extends TouchableOpacityProps {
   variant?: 'primary' | 'secondary';
 }
 
-export const Button = React.forwardRef<TouchableOpacity, ButtonProps>(
+export const Button = React.forwardRef<React.ElementRef<typeof TouchableOpacity>, ButtonProps>(
   ({ title, variant = 'primary', style, ...props }, ref) => {
     return (
       <TouchableOpacity 
