@@ -1,16 +1,17 @@
 {
   "expo": {
-    "name": "bolt-expo-nativewind",
-    "slug": "bolt-expo-nativewind",
+    "name": "Tuskers App",
+    "slug": "tuskers",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/Tuskers.png",
     "scheme": "myapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.tuskers.app"
+      "bundleIdentifier": "com.tuskers.app",
+      "buildNumber": "1.0.0"
     },
     "web": {
       "bundler": "metro",
