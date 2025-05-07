@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { StyleSheet, View, Text, ScrollView, RefreshControl } from 'react-native';
 import { collection, query, where, getDocs, doc, updateDoc } from 'firebase/firestore';
 import { router } from 'expo-router';
@@ -6,6 +6,8 @@ import { db } from '../../utils/firebase';
 import { Button } from '../../components/Button';
 import { User } from '../../types/user';
 import { useUser } from '../../context/UserContext';
+import { AppState, AppStateStatus } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 
 export default function AdminScreen() {
   const { user: currentUser } = useUser();
@@ -99,8 +101,22 @@ export default function AdminScreen() {
     fetchPendingUsers();
   };
 
+  // useEffect(() => {
+  //   fetchPendingUsers();
+  // }, []);
+  useFocusEffect(
+    useCallback(() => {
+      fetchPendingUsers();
+    }, [])
+  );
   useEffect(() => {
-    fetchPendingUsers();
+    const appState = AppState.currentState;
+    const subscription = AppState.addEventListener('change', nextAppState => {
+      if (appState.match(/inactive|background/) && nextAppState === 'active') {
+        fetchPendingUsers();
+      }
+    });
+    return () => subscription.remove();
   }, []);
 
   if (loading) {

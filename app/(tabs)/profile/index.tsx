@@ -12,6 +12,7 @@ import { Button } from '../../components/Button';
 import { User } from '../../types/user';
 import { KeyboardAvoidingWrapper } from '../../components/KeyboardAvoidingWrapper';
 import { useUser } from '../../context/UserContext';
+import { Alert } from 'react-native';
 
 export default function ProfileScreen() {
   const { user: contextUser, refreshUser } = useUser();
@@ -67,9 +68,18 @@ export default function ProfileScreen() {
 
   const pickImage = async () => {
     try {
+
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert(
+          'Permission Required',
+          'Please enable photo access in Settings > Privacy > Photos.'
+        );
+        return;
+      }
       const result = await ImagePicker.launchImageLibraryAsync({
-        //mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        mediaTypes: 'images' as ImagePicker.MediaTypeOptions,
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        //mediaTypes: 'images' as ImagePicker.MediaTypeOptions,
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.5,
@@ -77,7 +87,7 @@ export default function ProfileScreen() {
 
       if (!result.canceled && result.assets[0]) {
         const selectedImage = result.assets[0];
-        
+
         // Get file extension from URI or use default
         let fileType = 'jpeg';
         if (selectedImage.uri) {
@@ -138,7 +148,7 @@ export default function ProfileScreen() {
 
       // Update local state
       setUser(prev => prev ? { ...prev, photoURL: downloadURL } : null);
-      
+
       // Refresh user context
       await refreshUser();
     } catch (error: any) {
@@ -153,7 +163,7 @@ export default function ProfileScreen() {
     try {
       setSaving(true);
       setError(null);
-      
+
       if (!auth.currentUser) return;
 
       const userRef = doc(db, 'users', auth.currentUser.uid);
@@ -175,9 +185,9 @@ export default function ProfileScreen() {
   const handlePasswordUpdate = async () => {
     try {
       setPasswordError(null);
-      
+
       if (!auth.currentUser?.email) return;
-      
+
       // Validate password fields
       if (!passwordData.currentPassword || !passwordData.newPassword || !passwordData.confirmNewPassword) {
         setPasswordError('All password fields are required');
@@ -201,7 +211,7 @@ export default function ProfileScreen() {
         auth.currentUser.email,
         passwordData.currentPassword
       );
-      
+
       await reauthenticateWithCredential(auth.currentUser, credential);
       await updatePassword(auth.currentUser, passwordData.newPassword);
 
@@ -247,7 +257,7 @@ export default function ProfileScreen() {
         <ScrollView>
           <View style={styles.header}>
             <Image
-              source={{ 
+              source={{
                 uri: user?.photoURL || 'https://images.unsplash.com/photo-1579546929518-9e396f3cc809?w=800&auto=format&fit=crop&q=80',
                 cache: 'reload',
               }}
@@ -258,13 +268,13 @@ export default function ProfileScreen() {
 
           <View style={styles.content}>
             <View style={styles.profileHeader}>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.avatarContainer}
                 onPress={pickImage}
                 disabled={uploadingImage}
               >
                 <Image
-                  source={{ 
+                  source={{
                     uri: user?.photoURL || 'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?w=800&auto=format&fit=crop&q=80',
                     cache: 'reload',
                   }}
@@ -293,7 +303,7 @@ export default function ProfileScreen() {
 
             <View style={styles.form}>
               <Text style={styles.sectionTitle}>Profile Information</Text>
-              
+
               <Input
                 label="Full Name"
                 value={formData.fullName}

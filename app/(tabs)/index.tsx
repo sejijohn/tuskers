@@ -160,6 +160,13 @@ useFocusEffect(
     return () => unsubscribe();
   }, [user]);
 
+  const getLocationWithTimeout = (timeout = 10000): Promise<Location.LocationObject> => {
+    return Promise.race<Location.LocationObject>([
+      Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
+      new Promise<Location.LocationObject>((_, reject) => setTimeout(() => reject(new Error('Location timeout')), timeout)),
+    ]);
+  };
+
 
   const fetchWeather = async () => {
     try {
@@ -173,7 +180,10 @@ useFocusEffect(
         return;
       }
 
-      const location = await Location.getCurrentPositionAsync({});
+      // const location = await Location.getCurrentPositionAsync({
+      //   accuracy: Location.Accuracy.Balanced,
+      // });
+      const location = await getLocationWithTimeout(10000); // 10s timeout
       const { latitude, longitude } = location.coords;
 
       const response = await fetch(
@@ -196,6 +206,7 @@ useFocusEffect(
     } finally {
       setWeatherLoading(false);
     }
+    //setWeatherError('Unable to fetch weather data');
   };
 
   const getWeatherCondition = (code: number) => {

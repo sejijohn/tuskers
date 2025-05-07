@@ -11,7 +11,7 @@ Notifications.setNotificationHandler({
 });
 
 export async function registerForPushNotificationsAsync() {
-  console.log("registerForPushNotificationsAsync function called");
+  //console.log("registerForPushNotificationsAsync function called");
   let token;
 
   if (Platform.OS === 'android') {
@@ -35,7 +35,7 @@ export async function registerForPushNotificationsAsync() {
       return;
     }
     token = (await Notifications.getExpoPushTokenAsync({ projectId: 'fd5eb028-000f-415b-a8ef-39a6efa42a91' })).data;
-    console.log("FCM token received:", token); // Add this line
+    //console.log("FCM token received:", token); // Add this line
   } else {
     alert('Must use physical device for Push Notifications');
   }
@@ -43,40 +43,3 @@ export async function registerForPushNotificationsAsync() {
   return token;
 }
 
-// utils/notifications.ts
-// import * as Notifications from 'expo-notifications';
-// import * as Device from 'expo-device';
-// import Constants from 'expo-constants';
-
-// export async function registerForPushNotificationsAsync(): Promise<string | null> {
-//   if (!Device.isDevice) {
-//     console.warn("Push notifications only work on physical devices.");
-//     return null;
-//   }
-
-//   const { status: existingStatus } = await Notifications.getPermissionsAsync();
-//   let finalStatus = existingStatus;
-
-//   if (existingStatus !== 'granted') {
-//     const { status } = await Notifications.requestPermissionsAsync();
-//     finalStatus = status;
-//   }
-
-//   if (finalStatus !== 'granted') {
-//     console.warn("Push notification permissions not granted.");
-//     return null;
-//   }
-//   const projectId = Constants.expoConfig?.extra?.eas?.projectId;
-// console.log("Project ID:", projectId);
-
-//   try {
-//     const tokenResponse = await Notifications.getExpoPushTokenAsync({
-//       projectId: Constants.expoConfig?.extra?.eas?.projectId,
-//     });
-//     console.log("Expo Push Token:", tokenResponse.data);
-//     return tokenResponse.data;
-//   } catch (error) {
-//     console.error("Failed to get Expo push token:", error);
-//     return null;
-//   }
-// }
