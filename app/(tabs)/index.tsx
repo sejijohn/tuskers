@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { StyleSheet, View, Text, ScrollView, TextInput, TouchableOpacity, Alert, Image, AppState } from 'react-native';
+import { StyleSheet, View, Text, ScrollView, TextInput, TouchableOpacity, Alert, Image, AppState, Linking} from 'react-native';
 import { doc, getDoc, collection, query, where, getDocs, orderBy, onSnapshot, addDoc, deleteDoc } from 'firebase/firestore';
 import { useRouter } from 'expo-router';
 import { Send, Trash2, Cloud, CloudRain, Sun, Wind, CloudLightning, CloudSnow, CloudFog, Users, Calendar } from 'lucide-react-native';
@@ -10,6 +10,8 @@ import { Poll } from '../types/poll';
 import { KeyboardAvoidingWrapper } from '../components/KeyboardAvoidingWrapper';
 import * as Location from 'expo-location';
 import { useFocusEffect } from '@react-navigation/native';
+import ParsedText from 'react-native-parsed-text';
+
 
 const motorcycleImages = [
   {
@@ -38,7 +40,7 @@ interface Weather {
   precipitation: number;
 }
 
-const celsiusToFahrenheit = (celsius: number) => Math.round(celsius * 9/5 + 32);
+const celsiusToFahrenheit = (celsius: number) => Math.round(celsius * 9 / 5 + 32);
 const kmhToMph = (kmh: number) => Math.round(kmh * 0.621371);
 const mmToInches = (mm: number) => Number((mm * 0.0393701).toFixed(2));
 
@@ -59,11 +61,11 @@ export default function MemberDashboard() {
   const appState = useRef(AppState.currentState);
 
 
-useFocusEffect(
-  useCallback(() => {
-    fetchWeather();
-  }, [])
-);
+  useFocusEffect(
+    useCallback(() => {
+      fetchWeather();
+    }, [])
+  );
 
   useEffect(() => {
     const fetchUserData = async () => {
@@ -87,7 +89,7 @@ useFocusEffect(
 
   useEffect(() => {
     const interval = setInterval(() => {
-      setCurrentImageIndex((current) => 
+      setCurrentImageIndex((current) =>
         current === motorcycleImages.length - 1 ? 0 : current + 1
       );
     }, 5000);
@@ -119,16 +121,16 @@ useFocusEffect(
   useEffect(() => {
     fetchWeather();
     // Also fetch when app comes back to foreground
-  const subscription = AppState.addEventListener('change', nextAppState => {
-    if (appState.current.match(/inactive|background/) && nextAppState === 'active') {
-      // App has come to foreground
-      fetchWeather();
-    }
-    appState.current = nextAppState;
-  });
-  return () => {
-    subscription.remove();
-  };
+    const subscription = AppState.addEventListener('change', nextAppState => {
+      if (appState.current.match(/inactive|background/) && nextAppState === 'active') {
+        // App has come to foreground
+        fetchWeather();
+      }
+      appState.current = nextAppState;
+    });
+    return () => {
+      subscription.remove();
+    };
   }, []);
 
   useEffect(() => {
@@ -147,10 +149,10 @@ useFocusEffect(
         //const hasEnded = new Date(pollData.endsAt).getTime() <= new Date().getTime();
         const hasEnded = pollData.endsAt.toDate().getTime() <= new Date().getTime();
         if (!hasEnded) {
-        setActiveRidePoll({ ...pollData, id: snapshot.docs[0].id });
-      } else {
-        setActiveRidePoll(null);
-      }
+          setActiveRidePoll({ ...pollData, id: snapshot.docs[0].id });
+        } else {
+          setActiveRidePoll(null);
+        }
       } else {
         setActiveRidePoll(null);
       }
@@ -159,6 +161,13 @@ useFocusEffect(
 
     return () => unsubscribe();
   }, [user]);
+
+  const getLocationWithTimeout = (timeout = 10000): Promise<Location.LocationObject> => {
+    return Promise.race<Location.LocationObject>([
+      Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
+      new Promise<Location.LocationObject>((_, reject) => setTimeout(() => reject(new Error('Location timeout')), timeout)),
+    ]);
+  };
 
 
   const fetchWeather = async () => {
@@ -173,7 +182,10 @@ useFocusEffect(
         return;
       }
 
-      const location = await Location.getCurrentPositionAsync({});
+      // const location = await Location.getCurrentPositionAsync({
+      //   accuracy: Location.Accuracy.Balanced,
+      // });
+      const location = await getLocationWithTimeout(10000); // 10s timeout
       const { latitude, longitude } = location.coords;
 
       const response = await fetch(
@@ -196,6 +208,7 @@ useFocusEffect(
     } finally {
       setWeatherLoading(false);
     }
+    //setWeatherError('Unable to fetch weather data');
   };
 
   const getWeatherCondition = (code: number) => {
@@ -217,7 +230,7 @@ useFocusEffect(
     const tempF = celsiusToFahrenheit(weather.temperature);
     const windMph = kmhToMph(weather.windSpeed);
     const precipInches = mmToInches(weather.precipitation);
-    
+
     if (tempF < 40) return {
       status: 'Poor',
       message: 'Very cold conditions. Consider postponing your ride.',
@@ -230,7 +243,7 @@ useFocusEffect(
     };
     if (windMph > 20) return {
       status: 'Poor',
-      message: 'High winds make riding dangerous. Better to wait.',
+      message: 'High winds make riding dangerous.',
       color: '#FF6B4A'
     };
     if (precipInches > 0.2) return {
@@ -240,12 +253,42 @@ useFocusEffect(
     };
     if (condition.includes('Rain') || condition.includes('Drizzle')) return {
       status: 'Moderate',
-      message: 'Wet conditions. Ride with caution if necessary.',
+      message: 'Ride with caution if necessary.',
       color: '#FFA500'
     };
     if (condition.includes('Clear')) return {
       status: 'Excellent',
       message: 'Perfect conditions for a ride!',
+      color: '#3dd9d6'
+    };
+    if (condition === 'Overcast') return {
+      status: 'Moderate',
+      message: 'Might turn rainy. Be prepared just in case.',
+      color: '#FFA500'
+    };
+    if (condition === 'Snow') return {
+      status: 'Poor',
+      message: 'Not safe for riding. Strongly avoid.',
+      color: '#FF6B4A'
+    };
+    if (condition === 'Rain showers') return {
+      status: 'Moderate',
+      message: 'Ride with caution and consider rain gear.',
+      color: '#FFA500'
+    };
+    if (condition === 'Thunderstorm') return {
+      status: 'Poor',
+      message: 'Postpone your ride. Unsafe conditions.',
+      color: '#FF6B4A'
+    };
+    if (condition === 'Mainly clear') return {
+      status: 'Excellent',
+      message: 'Great for riding. Enjoy the road!',
+      color: '#3dd9d6'
+    };
+    if (condition === 'Partly cloudy') return {
+      status: 'Good',
+      message: 'Nice weather. Stay alert and enjoy your ride.',
       color: '#3dd9d6'
     };
     return {
@@ -293,7 +336,7 @@ useFocusEffect(
 
   const renderWeatherIcon = (code: number) => {
     const condition = getWeatherCondition(code).toLowerCase();
-    
+
     if (condition.includes('thunderstorm')) {
       return <CloudLightning size={24} color="#3dd9d6" />;
     }
@@ -321,7 +364,7 @@ useFocusEffect(
   };
 
   const getWinningOption = (poll: Poll) => {
-    return poll.options.reduce((prev, current) => 
+    return poll.options.reduce((prev, current) =>
       current.votes.length > prev.votes.length ? current : prev
     );
   };
@@ -389,7 +432,7 @@ useFocusEffect(
                   {getWeatherCondition(weather.weatherCode)}
                 </Text>
               </View>
-              
+
               <View style={styles.weatherDetails}>
                 <View style={styles.weatherDetail}>
                   <Wind size={16} color="#3dd9d6" />
@@ -440,8 +483,28 @@ useFocusEffect(
               </View>
 
               <View style={styles.rideInfo}>
-                <Text style={styles.rideQuestion}>{activeRidePoll.question}</Text>
-                
+                {/* <Text style={styles.rideQuestion}>{activeRidePoll.question}</Text> */}
+                <ParsedText
+                  style={styles.rideQuestion}
+                  parse={[
+                    {
+                      type: 'url',
+                      style: { color: '#3dd9d6', textDecorationLine: 'underline' },
+                      onPress: async (url) => {
+                        const supported = await Linking.canOpenURL(url);
+                        if (supported) {
+                          Linking.openURL(url);
+                        } else {
+                          Alert.alert("Can't open this URL:", url);
+                        }
+                      },
+                    },
+                  ]}
+                  childrenProps={{ allowFontScaling: false }}
+                >
+                  {activeRidePoll.question}
+                </ParsedText>
+
                 <View style={styles.rideStats}>
                   <View style={styles.rideStat}>
                     <Users size={16} color="#3dd9d6" />
@@ -506,7 +569,27 @@ useFocusEffect(
                 <View key={update.id} style={styles.updateItem}>
                   <View style={styles.updateHeader}>
                     <View style={styles.updateInfo}>
-                      <Text style={styles.updateContent}>{update.content}</Text>
+                      {/* <Text style={styles.updateContent}>{update.content}</Text> */}
+                      <ParsedText
+                        style={styles.updateContent}
+                        parse={[
+                          {
+                            type: 'url',
+                            style: { color: '#3dd9d6', textDecorationLine: 'underline' },
+                            onPress: async (url) => {
+                              const supported = await Linking.canOpenURL(url);
+                              if (supported) {
+                                Linking.openURL(url);
+                              } else {
+                                Alert.alert("Can't open this URL:", url);
+                              }
+                            },
+                          },
+                        ]}
+                        childrenProps={{ allowFontScaling: false }}
+                      >
+                        {update.content}
+                      </ParsedText>
                       <Text style={styles.updateMeta}>
                         By {update.createdByName} • {new Date(update.createdAt).toLocaleDateString()}
                       </Text>
@@ -523,7 +606,7 @@ useFocusEffect(
                             'Are you sure you want to delete this update?',
                             [
                               { text: 'Cancel', style: 'cancel' },
-                              { 
+                              {
                                 text: 'Delete',
                                 style: 'destructive',
                                 onPress: () => handleDeleteUpdate(update.id)
@@ -533,9 +616,9 @@ useFocusEffect(
                         }}
                         disabled={deleting === update.id}
                       >
-                        <Trash2 
-                          size={18} 
-                          color={deleting === update.id ? 'rgba(255, 107, 74, 0.5)' : '#FF6B4A'} 
+                        <Trash2
+                          size={18}
+                          color={deleting === update.id ? 'rgba(255, 107, 74, 0.5)' : '#FF6B4A'}
                         />
                       </TouchableOpacity>
                     )}
@@ -708,7 +791,7 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   rideQuestion: {
-    fontSize: 18,
+    fontSize: 14,
     color: '#ffffff',
     marginBottom: 12,
   },
@@ -767,7 +850,7 @@ const styles = StyleSheet.create({
   },
   inputContainer: {
     flexDirection: 'row',
-    marginBottom: 16,
+    marginBottom: 26,
     gap: 8,
   },
   input: {
@@ -779,6 +862,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     minHeight: 40,
     maxHeight: 100,
+    marginBottom:26,
   },
   postButton: {
     width: 40,

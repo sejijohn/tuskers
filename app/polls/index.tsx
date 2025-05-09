@@ -1,13 +1,15 @@
 import { useState, useEffect } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Alert, TextInput,Modal,FlatList,Image } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Alert, TextInput, Modal, FlatList, Image, Linking } from 'react-native';
 import { useRouter } from 'expo-router';
 import { collection, query, where, onSnapshot, doc, updateDoc, getDoc, increment } from 'firebase/firestore';
 import { Timer, Users, CheckCircle2, CreditCard as Edit2, Save, X, ListMinus } from 'lucide-react-native';
 import { db } from '../utils/firebase';
 import { useUser } from '../context/UserContext';
 import { Poll } from '../types/poll';
-import { Timestamp } from "firebase/firestore"; 
+import { Timestamp } from "firebase/firestore";
 import { User, UserWithVote } from '../types/user';
+import ParsedText from 'react-native-parsed-text';
+
 
 
 export default function PollsScreen() {
@@ -51,7 +53,7 @@ export default function PollsScreen() {
   //       const userDoc = await getDoc(doc(db, "users", id));
   //       return userDoc.exists() ? { id: id, ...userDoc.data() } as User : null;
   //     });
-  
+
   //     const users = (await Promise.all(userPromises)).filter(Boolean) as User[];
   //     setMembers(users);
   //   };
@@ -90,85 +92,85 @@ export default function PollsScreen() {
 
 
   const handleVote = async (optionId: string, poll: Poll) => {
-        if (!user) return;
+    if (!user) return;
 
-        try {
-            const isVoting = poll.options.find(option => option.votes.includes(user.id));
+    try {
+      const isVoting = poll.options.find(option => option.votes.includes(user.id));
 
-            if(isVoting && isVoting.id === optionId){
-                await updateDoc(doc(db, 'polls', poll.id), {
-                    options: poll.options.map(option => ({
-                        ...option,
-                        votes: option.id === optionId ? option.votes.filter(userId => userId !== user.id) : option.votes,
-                    })),
-                });
+      if (isVoting && isVoting.id === optionId) {
+        await updateDoc(doc(db, 'polls', poll.id), {
+          options: poll.options.map(option => ({
+            ...option,
+            votes: option.id === optionId ? option.votes.filter(userId => userId !== user.id) : option.votes,
+          })),
+        });
 
-                // Check if the user is deselecting "Yes, I am joining the ride."
-                const previousVote = poll.options.find(option => option.votes.includes(user.id));
-                if (
-                  poll.ridePoll &&
-                  previousVote &&
-                  previousVote.text === "Yes, I am joining the ride." &&
-                  optionId === previousVote.id
-                ) {
-                  // Decrement the rideCounter
-                  const userDocRef = doc(db, 'users', user.id);
-                  const userDoc = await getDoc(userDocRef);
-                  if (userDoc.exists()) {
-                    const userData = userDoc.data();
-                    if (userData.rideCounter && userData.rideCounter > 0) {
-                      await updateDoc(userDocRef, { rideCounter: increment(-1) });
-                    }
-                  }
-                }
-                return;
+        // Check if the user is deselecting "Yes, I am joining the ride."
+        const previousVote = poll.options.find(option => option.votes.includes(user.id));
+        if (
+          poll.ridePoll &&
+          previousVote &&
+          previousVote.text === "Yes, I am joining the ride." &&
+          optionId === previousVote.id
+        ) {
+          // Decrement the rideCounter
+          const userDocRef = doc(db, 'users', user.id);
+          const userDoc = await getDoc(userDocRef);
+          if (userDoc.exists()) {
+            const userData = userDoc.data();
+            if (userData.rideCounter && userData.rideCounter > 0) {
+              await updateDoc(userDocRef, { rideCounter: increment(-1) });
             }
+          }
+        }
+        return;
+      }
 
-            await updateDoc(doc(db, 'polls', poll.id), {
-                options: poll.options.map(option => ({
-                    ...option,
-                    votes: option.id === optionId ? [...option.votes, user.id] : option.votes.filter(userId => userId !== user.id),
-                })),
-            });
+      await updateDoc(doc(db, 'polls', poll.id), {
+        options: poll.options.map(option => ({
+          ...option,
+          votes: option.id === optionId ? [...option.votes, user.id] : option.votes.filter(userId => userId !== user.id),
+        })),
+      });
 
-            // Handle rideCounter for ride polls
-            if (poll.ridePoll) {
-                const selectedOption = poll.options.find(option => option.id === optionId);
-                // Check if the user is voting for "Yes, I am joining the ride."
-                if (selectedOption && selectedOption.text === "Yes, I am joining the ride.") {
-                    // Increment the rideCounter
-                    const userDocRef = doc(db, 'users', user.id);
-                    const userDoc = await getDoc(userDocRef);
-                    if (userDoc.exists()) {
-                      const userData = userDoc.data();
-                      if (userData.rideCounter) {
-                        await updateDoc(userDocRef, { rideCounter: increment(1) });
-                      } else {
-                        await updateDoc(userDocRef, { rideCounter: 1 });
-                      }
-                    }
-                } else {
-                    // Check if the user is deselecting "Yes, I am joining the ride."
-                    const previousVote = poll.options.find(option => option.votes.includes(user.id));
-                    if (
-                      poll.ridePoll &&
-                      previousVote &&
-                      previousVote.text === "Yes, I am joining the ride." &&
-                      optionId !== previousVote.id
-                    ) {
-                      // Decrement the rideCounter
-                      const userDocRef = doc(db, 'users', user.id);
-                      const userDoc = await getDoc(userDocRef);
-                      if (userDoc.exists()) {
-                        const userData = userDoc.data();
-                        if (userData.rideCounter && userData.rideCounter > 0) {
-                          await updateDoc(userDocRef, { rideCounter: increment(-1) });
-                        }
-                      }
-                    }
-                }
+      // Handle rideCounter for ride polls
+      if (poll.ridePoll) {
+        const selectedOption = poll.options.find(option => option.id === optionId);
+        // Check if the user is voting for "Yes, I am joining the ride."
+        if (selectedOption && selectedOption.text === "Yes, I am joining the ride.") {
+          // Increment the rideCounter
+          const userDocRef = doc(db, 'users', user.id);
+          const userDoc = await getDoc(userDocRef);
+          if (userDoc.exists()) {
+            const userData = userDoc.data();
+            if (userData.rideCounter) {
+              await updateDoc(userDocRef, { rideCounter: increment(1) });
+            } else {
+              await updateDoc(userDocRef, { rideCounter: 1 });
             }
-        
+          }
+        } else {
+          // Check if the user is deselecting "Yes, I am joining the ride."
+          const previousVote = poll.options.find(option => option.votes.includes(user.id));
+          if (
+            poll.ridePoll &&
+            previousVote &&
+            previousVote.text === "Yes, I am joining the ride." &&
+            optionId !== previousVote.id
+          ) {
+            // Decrement the rideCounter
+            const userDocRef = doc(db, 'users', user.id);
+            const userDoc = await getDoc(userDocRef);
+            if (userDoc.exists()) {
+              const userData = userDoc.data();
+              if (userData.rideCounter && userData.rideCounter > 0) {
+                await updateDoc(userDocRef, { rideCounter: increment(-1) });
+              }
+            }
+          }
+        }
+      }
+
     } catch (error) {
       console.error('Error voting:', error);
       Alert.alert('Error', 'Failed to submit vote. Please try again.');
@@ -221,21 +223,21 @@ export default function PollsScreen() {
 
 
 
-const getTimeLeft = (endsAt: Timestamp) => {
-  const end = endsAt.toDate().getTime();
-  const now = new Date().getTime();
-  const diff = end - now;
+  const getTimeLeft = (endsAt: Timestamp) => {
+    const end = endsAt.toDate().getTime();
+    const now = new Date().getTime();
+    const diff = end - now;
 
-  if (diff <= 0) return 'Ended';
+    if (diff <= 0) return 'Ended';
 
-  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-  const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-  const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+    const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
 
-  if (days > 0) return `${days}d ${hours}h left`;
-  if (hours > 0) return `${hours}h ${minutes}m left`;
-  return `${minutes}m left`;
-};
+    if (days > 0) return `${days}d ${hours}h left`;
+    if (hours > 0) return `${hours}h ${minutes}m left`;
+    return `${minutes}m left`;
+  };
 
   const hasVoted = (poll: Poll) => {
     return poll.options.some(option => option.votes.includes(user?.id || ''));
@@ -265,21 +267,21 @@ const getTimeLeft = (endsAt: Timestamp) => {
     );
   }
 
-    const renderMemberItem = ({ item }: { item: UserWithVote }) => (
-      <View style={styles.memberItem}>
-        <Image
-          source={{ uri: item.photoURL || 'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?w=800&auto=format&fit=crop&q=80' }}
-          style={styles.memberAvatar}
-        />
-        <View style={styles.memberInfo}>
-          <Text style={styles.memberName}>{item.fullName}</Text>
-          <Text style={styles.memberRole}>{item.role}</Text>
-          <Text style={styles.memberOption}>Option: {item.votedOptionText}</Text>
-        </View>
+  const renderMemberItem = ({ item }: { item: UserWithVote }) => (
+    <View style={styles.memberItem}>
+      <Image
+        source={{ uri: item.photoURL || 'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?w=800&auto=format&fit=crop&q=80' }}
+        style={styles.memberAvatar}
+      />
+      <View style={styles.memberInfo}>
+        <Text style={styles.memberName}>{item.fullName}</Text>
+        <Text style={styles.memberRole}>{item.role}</Text>
+        <Text style={styles.memberOption}>Option: {item.votedOptionText}</Text>
       </View>
-    );
+    </View>
+  );
 
-  
+
 
   return (
     <View style={styles.container}>
@@ -329,7 +331,27 @@ const getTimeLeft = (endsAt: Timestamp) => {
                     </View>
                   ) : (
                     <>
-                      <Text style={styles.pollQuestion}>{poll.question}</Text>
+                      {/* <Text style={styles.pollQuestion}>{poll.question}</Text> */}
+                      <ParsedText
+                        style={styles.pollQuestion}
+                        parse={[
+                          {
+                            type: 'url',
+                            style: { color: '#3dd9d6', textDecorationLine: 'underline' },
+                            onPress: async (url) => {
+                              const supported = await Linking.canOpenURL(url);
+                              if (supported) {
+                                Linking.openURL(url);
+                              } else {
+                                Alert.alert("Can't open this URL:", url);
+                              }
+                            },
+                          },
+                        ]}
+                        childrenProps={{ allowFontScaling: false }}
+                      >
+                        {poll.question}
+                      </ParsedText>
                       {canEdit && (
                         <TouchableOpacity
                           onPress={() => startEditing(poll)}
@@ -347,11 +369,11 @@ const getTimeLeft = (endsAt: Timestamp) => {
                     </View>
                     <View style={styles.metaItem}>
                       <TouchableOpacity
-                                style={styles.membersButton}
-                                onPress={() => setShowMembers(true)}
-                              >
-                      <Users size={16} color="#3dd9d6" />
-                      <Text style={styles.metaText}> {totalVotes} votes</Text>
+                        style={styles.membersButton}
+                        onPress={() => setShowMembers(true)}
+                      >
+                        <Users size={16} color="#3dd9d6" />
+                        <Text style={styles.metaText}> {totalVotes} votes</Text>
                       </TouchableOpacity>
                     </View>
                   </View>
@@ -386,11 +408,11 @@ const getTimeLeft = (endsAt: Timestamp) => {
                         </View>
                         {(hasUserVoted || !isActive) && (
                           <View style={styles.resultBar}>
-                            <View 
+                            <View
                               style={[
                                 styles.resultFill,
                                 { width: `${percentage}%` }
-                              ]} 
+                              ]}
                             />
                             <Text style={styles.percentage}>{percentage}%</Text>
                           </View>
@@ -413,31 +435,31 @@ const getTimeLeft = (endsAt: Timestamp) => {
         )}
 
         <Modal
-                visible={showMembers}
-                transparent
-                animationType="slide"
-                onRequestClose={() => setShowMembers(false)}
-              >
-                <View style={styles.modalContainer}>
-                  <View style={styles.modalContent}>
-                    <View style={styles.modalHeader}>
-                      <Text style={styles.modalTitle}>Poll Members</Text>
-                      <TouchableOpacity
-                        style={styles.closeButton}
-                        onPress={() => setShowMembers(false)}
-                      >
-                        <X size={24} color="#3dd9d6" />
-                      </TouchableOpacity>
-                    </View>
-                    <FlatList
-                      data={members}
-                      renderItem={renderMemberItem}
-                      keyExtractor={(item) => item.id}
-                      contentContainerStyle={styles.membersList}
-                    />
-                  </View>
-                </View>
-              </Modal>
+          visible={showMembers}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setShowMembers(false)}
+        >
+          <View style={styles.modalContainer}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Poll Members</Text>
+                <TouchableOpacity
+                  style={styles.closeButton}
+                  onPress={() => setShowMembers(false)}
+                >
+                  <X size={24} color="#3dd9d6" />
+                </TouchableOpacity>
+              </View>
+              <FlatList
+                data={members}
+                renderItem={renderMemberItem}
+                keyExtractor={(item) => item.id}
+                contentContainerStyle={styles.membersList}
+              />
+            </View>
+          </View>
+        </Modal>
 
 
 
