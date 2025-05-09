@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { StyleSheet, View, Text, FlatList, TouchableOpacity, Image, Alert } from 'react-native';
+import { StyleSheet, View, Text, FlatList, TouchableOpacity, Image, Alert, Linking } from 'react-native';
 import { useRouter } from 'expo-router';
 import { collection, query, where, onSnapshot, orderBy, getDocs, deleteDoc, doc, addDoc, updateDoc, getDoc, increment } from 'firebase/firestore';
 import { MessageSquarePlus, Users, Trash2, Shield, PlusCircle, BarChart as ChartBar, List } from 'lucide-react-native';
@@ -10,6 +10,8 @@ import { User } from '../../types/user';
 import { Poll } from '../../types/poll';
 import { Button } from '../../components/Button';
 import { useFocusEffect } from '@react-navigation/native';
+import ParsedText from 'react-native-parsed-text';
+
 
 export default function ChatList() {
   const router = useRouter();
@@ -83,13 +85,13 @@ export default function ChatList() {
     });
 
     return () => {
-      unsubscribePoll(); 
+      unsubscribePoll();
       unsubscribeChats();// Unsubscribe from chats listener
     };
   }, [user]);
 
-   // Fetch all users first
-   const fetchUsers = async () => {
+  // Fetch all users first
+  const fetchUsers = async () => {
     const usersRef = collection(db, 'users');
     const usersSnapshot = await getDocs(usersRef);
     const usersMap: Record<string, User> = {};
@@ -101,10 +103,10 @@ export default function ChatList() {
 
   const getChatTitle = (chat: Chat) => {
     if (chat.type === 'group') return chat.name;
-    
+
     const otherParticipantId = chat.participants.find(id => id !== user?.id);
     if (!otherParticipantId) return 'Unknown';
-    
+
     const otherUser = users[otherParticipantId];
     return otherUser?.fullName || 'Unknown User';
   };
@@ -150,19 +152,19 @@ export default function ChatList() {
       } else {
 
 
-      // Create a group chat with all admins
-      const chatData = {
-        type: 'group',
-        name: 'Admin Support',
-        participants: [...adminIds, user.id],
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
+        // Create a group chat with all admins
+        const chatData = {
+          type: 'group',
+          name: 'Admin Support',
+          participants: [...adminIds, user.id],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
 
-      const chatRef = await addDoc(collection(db, 'chats'), chatData);
-      router.push(`/chat/${chatRef.id}`);
+        const chatRef = await addDoc(collection(db, 'chats'), chatData);
+        router.push(`/chat/${chatRef.id}`);
 
-    }
+      }
     } catch (error) {
       console.error('Error creating admin chat:', error);
       Alert.alert('Error', 'Failed to create admin chat. Please try again.');
@@ -182,7 +184,7 @@ export default function ChatList() {
       const pollData = pollDoc.data() as Poll;
       //const hasEnded = new Date(pollData.endsAt).getTime() <= new Date().getTime();
       const hasEnded =
-  pollData.endsAt.toDate().getTime() <= new Date().getTime();
+        pollData.endsAt.toDate().getTime() <= new Date().getTime();
 
       // Check permissions: allow if user is creator/admin or if poll has ended
       if (!hasEnded && user.id !== pollData.createdBy && user.role !== 'admin') {
@@ -212,7 +214,7 @@ export default function ChatList() {
                 if (pollData.ridePoll) {
                   const joiningOption = pollData.options.find(option => option.text === "Yes, I am joining the ride.");
                   if (joiningOption) {
-                    if(!pollData.isComplete){
+                    if (!pollData.isComplete) {
                       for (const userId of joiningOption.votes) {
                         const userDocRef = doc(db, 'users', userId);
                         const userDoc = await getDoc(userDocRef);
@@ -223,9 +225,9 @@ export default function ChatList() {
                           }
                         }
                       }
-                    } 
+                    }
                   }
-                }              
+                }
               } catch (error) {
                 console.error('Error deleting poll:', error);
                 Alert.alert('Error', 'Failed to delete poll');
@@ -258,9 +260,9 @@ export default function ChatList() {
         </View>
       ) : (
         <Image
-          source={{ 
-            uri: users[item.participants.find(id => id !== user?.id) || '']?.photoURL || 
-                'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?w=800&auto=format&fit=crop&q=80'
+          source={{
+            uri: users[item.participants.find(id => id !== user?.id) || '']?.photoURL ||
+              'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?w=800&auto=format&fit=crop&q=80'
           }}
           style={styles.avatar}
         />
@@ -277,14 +279,14 @@ export default function ChatList() {
         style={[
           styles.deleteButton,
           deleting === item.id && styles.deleteButtonDisabled
-        ]} 
+        ]}
         onPress={() => {
           Alert.alert(
             'Delete Chat',
             'Are you sure you want to delete this chat?',
             [
               { text: 'Cancel', style: 'cancel' },
-              { 
+              {
                 text: 'Delete',
                 style: 'destructive',
                 onPress: () => handleDeleteChat(item.id)
@@ -294,9 +296,9 @@ export default function ChatList() {
         }}
         disabled={deleting === item.id}
       >
-        <Trash2 
-          size={18} 
-          color={deleting === item.id ? 'rgba(255, 107, 74, 0.5)' : '#FF6B4A'} 
+        <Trash2
+          size={18}
+          color={deleting === item.id ? 'rgba(255, 107, 74, 0.5)' : '#FF6B4A'}
         />
       </TouchableOpacity>
     </TouchableOpacity>
@@ -328,9 +330,29 @@ export default function ChatList() {
             </TouchableOpacity>
           )}
         </View>
-        
-        <Text style={styles.pollQuestion}>{activePoll.question}</Text>
-        
+
+        {/* <Text style={styles.pollQuestion}>{activePoll.question}</Text> */}
+        <ParsedText
+          style={styles.pollQuestion}
+          parse={[
+            {
+              type: 'url',
+              style: { color: '#3dd9d6', textDecorationLine: 'underline' },
+              onPress: async (url) => {
+                const supported = await Linking.canOpenURL(url);
+                if (supported) {
+                  Linking.openURL(url);
+                } else {
+                  Alert.alert("Can't open this URL:", url);
+                }
+              },
+            },
+          ]}
+          childrenProps={{ allowFontScaling: false }}
+        >
+          {activePoll.question}
+        </ParsedText>
+
         <View style={styles.pollStats}>
           <Text style={styles.pollVotes}>{totalVotes} votes</Text>
           <Text style={styles.pollCreator}>by {activePoll.createdByName}</Text>
