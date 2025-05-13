@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Alert, TextInput } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Alert, TextInput, Linking } from 'react-native';
 import { useRouter } from 'expo-router';
 import { collection, query, where, onSnapshot, doc, updateDoc, getDoc, increment, getDocs } from 'firebase/firestore';
 import { Timer, Users, CheckCircle2, CreditCard as Edit2, Save, X } from 'lucide-react-native';
@@ -8,6 +8,7 @@ import { useUser } from '../context/UserContext';
 import { Poll } from '../types/poll';
 import { Timestamp } from "firebase/firestore";
 import { User } from '../types/user';
+import ParsedText from 'react-native-parsed-text';
 
 export default function CompletedPollsScreen() {
     const router = useRouter();
@@ -199,6 +200,14 @@ export default function CompletedPollsScreen() {
     if (total === 0) return 0;
     return Math.round((votes / total) * 100);
   };
+  const shortenUrl = (url: string) => {
+    try {
+      const { hostname } = new URL(url);
+      return hostname.length > 30 ? hostname.slice(0, 27) + '...' : hostname;
+    } catch {
+      return url.length > 30 ? url.slice(0, 27) + '...' : url;
+    }
+  };
 
   if (loading) {
     return (
@@ -256,7 +265,28 @@ export default function CompletedPollsScreen() {
                     </View>
                   ) : (
                     <>
-                      <Text style={styles.pollQuestion}>{poll.question}</Text>
+                      {/* <Text style={styles.pollQuestion}>{poll.question}</Text> */}
+                       <ParsedText
+                                style={styles.pollQuestion}
+                                parse={[
+                                  {
+                                    type: 'url',
+                                    style: { color: '#3dd9d6', textDecorationLine: 'underline' },
+                                    onPress: async (url) => {
+                                      const supported = await Linking.canOpenURL(url);
+                                      if (supported) {
+                                        Linking.openURL(url);
+                                      } else {
+                                        Alert.alert("Can't open this URL:", url);
+                                      }
+                                    },
+                                    renderText: shortenUrl,
+                                  },
+                                ]}
+                                childrenProps={{ allowFontScaling: false }}
+                              >
+                                {poll.question}
+                              </ParsedText>
                       {canEdit && (
                         <TouchableOpacity
                           onPress={() => startEditing(poll)}

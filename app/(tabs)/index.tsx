@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { StyleSheet, View, Text, ScrollView, TextInput, TouchableOpacity, Alert, Image, AppState, Linking} from 'react-native';
+import { StyleSheet, View, Text, ScrollView, TextInput, TouchableOpacity, Alert, Image, AppState, Linking, KeyboardAvoidingView, Platform} from 'react-native';
 import { doc, getDoc, collection, query, where, getDocs, orderBy, onSnapshot, addDoc, deleteDoc } from 'firebase/firestore';
 import { useRouter } from 'expo-router';
 import { Send, Trash2, Cloud, CloudRain, Sun, Wind, CloudLightning, CloudSnow, CloudFog, Users, Calendar } from 'lucide-react-native';
@@ -291,6 +291,11 @@ export default function MemberDashboard() {
       message: 'Nice weather. Stay alert and enjoy your ride.',
       color: '#3dd9d6'
     };
+    if (condition === 'Foggy') return {
+      status: 'Moderate',
+      message: 'Low visibility. Ride with caution.',
+      color: '#FFA500'
+    };
     return {
       status: 'Good',
       message: 'Decent conditions for riding. Stay alert.',
@@ -385,8 +390,22 @@ export default function MemberDashboard() {
     );
   }
 
+  const shortenUrl = (url: string) => {
+    try {
+      const { hostname } = new URL(url);
+      return hostname.length > 30 ? hostname.slice(0, 27) + '...' : hostname;
+    } catch {
+      return url.length > 30 ? url.slice(0, 27) + '...' : url;
+    }
+  };
+
   return (
-    <KeyboardAvoidingWrapper>
+    // <KeyboardAvoidingWrapper>
+    <KeyboardAvoidingView 
+    style={styles.container}
+    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+  >
       <View style={styles.container}>
         <ScrollView style={styles.content}>
           <View style={styles.imageContainer}>
@@ -498,6 +517,7 @@ export default function MemberDashboard() {
                           Alert.alert("Can't open this URL:", url);
                         }
                       },
+                      renderText: shortenUrl,
                     },
                   ]}
                   childrenProps={{ allowFontScaling: false }}
@@ -584,6 +604,7 @@ export default function MemberDashboard() {
                                 Alert.alert("Can't open this URL:", url);
                               }
                             },
+                            renderText: shortenUrl,
                           },
                         ]}
                         childrenProps={{ allowFontScaling: false }}
@@ -629,7 +650,9 @@ export default function MemberDashboard() {
           </View>
         </ScrollView>
       </View>
-    </KeyboardAvoidingWrapper>
+      
+    {/* </KeyboardAvoidingWrapper> */}
+    </KeyboardAvoidingView>
   );
 }
 
@@ -862,7 +885,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     minHeight: 40,
     maxHeight: 100,
-    marginBottom:26,
   },
   postButton: {
     width: 40,
