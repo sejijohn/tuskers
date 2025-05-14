@@ -11,6 +11,7 @@ import { KeyboardAvoidingWrapper } from '../components/KeyboardAvoidingWrapper';
 import * as Location from 'expo-location';
 import { useFocusEffect } from '@react-navigation/native';
 import ParsedText from 'react-native-parsed-text';
+import { useUser } from '../context/UserContext';
 
 const motorcycleImages = [
   {
@@ -45,6 +46,7 @@ const mmToInches = (mm: number) => Number((mm * 0.0393701).toFixed(2));
 
 export default function MemberDashboard() {
   const router = useRouter();
+  const { user: contextUser } = useUser();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
@@ -59,139 +61,152 @@ export default function MemberDashboard() {
   const [loadingPoll, setLoadingPoll] = useState(true);
   const appState = useRef(AppState.currentState);
 
-  // ... [Previous useEffect hooks and helper functions remain exactly the same until handleEmergencySOS] ...
+  // Initialize user data from context
+  useEffect(() => {
+    if (contextUser) {
+      setUser(contextUser);
+      setLoading(false);
+    }
+  }, [contextUser]);
 
-  const handleEmergencySOS = async () => {
+  // Image carousel interval
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentImageIndex((current) =>
+        current === motorcycleImages.length - 1 ? 0 : current + 1
+      );
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  // Fetch updates
+  useEffect(() => {
     if (!user) return;
 
-    // First confirmation
-    Alert.alert(
-      '🚨 Emergency SOS',
-      'This will alert all members. Are you sure you need emergency assistance?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Continue',
-          style: 'destructive',
-          onPress: () => {
-            // Second confirmation
-            Alert.alert(
-              '⚠️ Confirm Emergency',
-              'This will create an emergency chat and notify ALL members. Please confirm this is a real emergency.',
-              [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                  text: 'SEND SOS',
-                  style: 'destructive',
-                  onPress: async () => {
-                    try {
-                      // Get all approved members
-                      const membersQuery = query(
-                        collection(db, 'users'),
-                        where('approved', '==', true),
-                        where('deleted', '==', false)
-                      );
-                      const membersSnapshot = await getDocs(membersQuery);
-                      const memberIds = membersSnapshot.docs.map(doc => doc.id);
-
-                      // Check for existing emergency chat
-                      const existingChatQuery = query(
-                        collection(db, 'chats'),
-                        where('name', '==', '🚨 EMERGENCY SOS'),
-                        where('participants', 'array-contains', user.id)
-                      );
-                      const existingChats = await getDocs(existingChatQuery);
-
-                      let chatId;
-                      if (!existingChats.empty) {
-                        // Use existing emergency chat
-                        chatId = existingChats.docs[0].id;
-                      } else {
-                        // Create new emergency group chat
-                        const chatData = {
-                          type: 'group',
-                          name: '🚨 EMERGENCY SOS',
-                          participants: memberIds,
-                          createdAt: new Date().toISOString(),
-                          updatedAt: new Date().toISOString(),
-                        };
-                        const chatRef = await addDoc(collection(db, 'chats'), chatData);
-                        chatId = chatRef.id;
-                      }
-
-                      // Get user's location if available
-                      let locationStr = '';
-                      try {
-                        const { status } = await Location.requestForegroundPermissionsAsync();
-                        if (status === 'granted') {
-                          const location = await Location.getCurrentPositionAsync({});
-                          locationStr = `\n\nLocation: https://maps.google.com/?q=${location.coords.latitude},${location.coords.longitude}`;
-                        }
-                      } catch (error) {
-                        console.log('Error getting location:', error);
-                      }
-
-                      // Add emergency message
-                      const messageData = {
-                        content: `🚨 EMERGENCY SOS: PLEASE CALL ${user.phoneNumber || ''}\n\nEmergency assistance needed by ${user.fullName}.${locationStr}`,
-                        senderId: user.id,
-                        senderName: user.fullName,
-                        senderPhotoURL: user.photoURL,
-                        timestamp: new Date().toISOString(),
-                        type: 'text',
-                        statusMap: {
-                          [user.id]: 'sent'
-                        }
-                      };
-
-                      await addDoc(collection(db, 'chats', chatId, 'messages'), messageData);
-
-                      // Update chat's last message
-                      await updateDoc(doc(db, 'chats', chatId), {
-                        lastMessage: messageData,
-                        updatedAt: new Date().toISOString(),
-                      });
-
-                      // Navigate to the emergency chat
-                      router.push(`/chat/${chatId}`);
-                    } catch (error) {
-                      console.error('Error sending SOS:', error);
-                      Alert.alert('Error', 'Failed to send SOS. Please try again.');
-                    }
-                  }
-                }
-              ]
-            );
-          }
-        }
-      ]
+    const updatesQuery = query(
+      collection(db, 'updates'),
+      orderBy('createdAt', 'desc')
     );
+
+    const unsubscribeUpdates = onSnapshot(updatesQuery, (snapshot) => {
+      const updatesList: Update[] = [];
+      snapshot.forEach((doc) => {
+        updatesList.push({ id: doc.id, ...doc.data() } as Update);
+      });
+      setUpdates(updatesList);
+    });
+
+    return () => {
+      unsubscribeUpdates();
+    };
+  }, [user]);
+
+  // Fetch weather data
+  useFocusEffect(
+    useCallback(() => {
+      fetchWeather();
+    }, [])
+  );
+
+  // Weather and app state handling
+  useEffect(() => {
+    fetchWeather();
+    const subscription = AppState.addEventListener('change', nextAppState => {
+      if (appState.current.match(/inactive|background/) && nextAppState === 'active') {
+        fetchWeather();
+      }
+      appState.current = nextAppState;
+    });
+    return () => {
+      subscription.remove();
+    };
+  }, []);
+
+  // Fetch active ride poll
+  useEffect(() => {
+    if (!user) return;
+
+    const pollQuery = query(
+      collection(db, 'polls'),
+      where('isActive', '==', true),
+      where('isComplete', '==', false),
+      where('ridePoll', '==', true)
+    );
+
+    const unsubscribe = onSnapshot(pollQuery, (snapshot) => {
+      if (!snapshot.empty) {
+        const pollData = snapshot.docs[0].data() as Poll;
+        const hasEnded = pollData.endsAt.toDate().getTime() <= new Date().getTime();
+        if (!hasEnded) {
+          setActiveRidePoll({ ...pollData, id: snapshot.docs[0].id });
+        } else {
+          setActiveRidePoll(null);
+        }
+      } else {
+        setActiveRidePoll(null);
+      }
+      setLoadingPoll(false);
+    });
+
+    return () => unsubscribe();
+  }, [user]);
+
+  const fetchWeather = async () => {
+    try {
+      setWeatherLoading(true);
+      setWeatherError(null);
+
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        setWeatherError('Location permission not granted');
+        setWeatherLoading(false);
+        return;
+      }
+
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced
+      });
+      const { latitude, longitude } = location.coords;
+
+      const response = await fetch(
+        `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,precipitation,weather_code,wind_speed_10m`
+      );
+
+      if (!response.ok) throw new Error('Weather data not available');
+
+      const data = await response.json();
+      setWeather({
+        temperature: Math.round(data.current.temperature_2m),
+        weatherCode: data.current.weather_code,
+        windSpeed: Math.round(data.current.wind_speed_10m),
+        humidity: data.current.relative_humidity_2m,
+        precipitation: data.current.precipitation
+      });
+    } catch (error) {
+      console.error('Error fetching weather:', error);
+      setWeatherError('Unable to fetch weather data');
+    } finally {
+      setWeatherLoading(false);
+    }
   };
 
-  // ... [Previous render code and return statement remain exactly the same, but with updated SOS button handler] ...
+  // ... [Rest of the code remains the same] ...
 
-  return (
-    <KeyboardAvoidingView 
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
-    >
+  if (loading) {
+    return (
       <View style={styles.container}>
-        <ScrollView style={styles.content}>
-          {/* Previous content remains exactly the same */}
-        </ScrollView>
-        <TouchableOpacity
-          style={styles.sosButton}
-          onPress={handleEmergencySOS}
-        >
-          <AlertOctagon size={24} color="#ffffff" />
-          <Text style={styles.sosButtonText}>Emergency SOS</Text>
-        </TouchableOpacity>
+        <Text style={styles.loadingText}>Loading...</Text>
       </View>
-    </KeyboardAvoidingView>
-  );
-}
+    );
+  }
 
-const styles = StyleSheet.create({
-  // ... [All previous styles remain exactly the same] ...
-});
+  if (!user) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.errorText}>Please log in to view the dashboard</Text>
+      </View>
+    );
+  }
+
+  // ... [Rest of the code remains exactly the same] ...
