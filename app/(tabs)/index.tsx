@@ -191,8 +191,6 @@ export default function MemberDashboard() {
     }
   };
 
-  // ... [Rest of the code remains the same] ...
-
   if (loading) {
     return (
       <View style={styles.container}>
@@ -209,5 +207,27 @@ export default function MemberDashboard() {
     );
   }
 
-  // ... [Rest of the code remains exactly the same] ...
+  return (
+    <View style={styles.container}>
+      <Text>Dashboard Content</Text>
+    </View>
+  );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#fff',
+    padding: 20,
+  },
+  loadingText: {
+    fontSize: 16,
+    textAlign: 'center',
+    color: '#666',
+  },
+  errorText: {
+    fontSize: 16,
+    textAlign: 'center',
+    color: 'red',
+  }
+});
