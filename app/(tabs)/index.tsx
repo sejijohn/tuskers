@@ -146,7 +146,6 @@ export default function MemberDashboard() {
     const unsubscribe = onSnapshot(pollQuery, (snapshot) => {
       if (!snapshot.empty) {
         const pollData = snapshot.docs[0].data() as Poll;
-        //const hasEnded = new Date(pollData.endsAt).getTime() <= new Date().getTime();
         const hasEnded = pollData.endsAt.toDate().getTime() <= new Date().getTime();
         if (!hasEnded) {
           setActiveRidePoll({ ...pollData, id: snapshot.docs[0].id });
@@ -182,10 +181,7 @@ export default function MemberDashboard() {
         return;
       }
 
-      // const location = await Location.getCurrentPositionAsync({
-      //   accuracy: Location.Accuracy.Balanced,
-      // });
-      const location = await getLocationWithTimeout(10000); // 10s timeout
+      const location = await getLocationWithTimeout(10000);
       const { latitude, longitude } = location.coords;
 
       const response = await fetch(
@@ -208,7 +204,6 @@ export default function MemberDashboard() {
     } finally {
       setWeatherLoading(false);
     }
-    //setWeatherError('Unable to fetch weather data');
   };
 
   const getWeatherCondition = (code: number) => {
@@ -400,12 +395,14 @@ export default function MemberDashboard() {
   };
 
   return (
+
     // <KeyboardAvoidingWrapper>
     <KeyboardAvoidingView 
     style={styles.container}
     behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
   >
+
       <View style={styles.container}>
         <ScrollView style={styles.content}>
           <View style={styles.imageContainer}>
@@ -502,7 +499,6 @@ export default function MemberDashboard() {
               </View>
 
               <View style={styles.rideInfo}>
-                {/* <Text style={styles.rideQuestion}>{activeRidePoll.question}</Text> */}
                 <ParsedText
                   style={styles.rideQuestion}
                   parse={[
@@ -589,7 +585,6 @@ export default function MemberDashboard() {
                 <View key={update.id} style={styles.updateItem}>
                   <View style={styles.updateHeader}>
                     <View style={styles.updateInfo}>
-                      {/* <Text style={styles.updateContent}>{update.content}</Text> */}
                       <ParsedText
                         style={styles.updateContent}
                         parse={[
@@ -650,8 +645,10 @@ export default function MemberDashboard() {
           </View>
         </ScrollView>
       </View>
+
       
     {/* </KeyboardAvoidingWrapper> */}
+
     </KeyboardAvoidingView>
   );
 }
@@ -885,6 +882,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     minHeight: 40,
     maxHeight: 100,
+
   },
   postButton: {
     width: 40,
