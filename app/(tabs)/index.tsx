@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { StyleSheet, View, Text, ScrollView, TextInput, TouchableOpacity, Alert, Image, AppState, Linking, KeyboardAvoidingView, Platform} from 'react-native';
 import { doc, getDoc, collection, query, where, getDocs, orderBy, onSnapshot, addDoc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { useRouter } from 'expo-router';
-import { Send, Trash2, Cloud, CloudRain, Sun, Wind, CloudLightning, CloudSnow, CloudFog, Users, Calendar, AlertOctagon } from 'lucide-react-native';
+import { Send, Trash2, Cloud, CloudRain, Sun, Wind, CloudLightning, CloudSnow, CloudFog, Users, Calendar, OctagonAlert as AlertOctagon } from 'lucide-react-native';
 import { auth, db } from '../utils/firebase';
 import { User } from '../types/user';
 import { Update } from '../types/update';
