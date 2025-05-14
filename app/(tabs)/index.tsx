@@ -644,62 +644,104 @@ export default function MemberDashboard() {
           <TouchableOpacity
             style={styles.sosButton}
             onPress={() => {
+              // First confirmation
               Alert.alert(
-                'Emergency SOS',
-                'This will create an emergency group chat and notify all members. Are you sure?',
+                '🚨 Emergency SOS',
+                'This will alert all members. Are you sure you need emergency assistance?',
                 [
                   { text: 'Cancel', style: 'cancel' },
                   {
-                    text: 'Send SOS',
+                    text: 'Continue',
                     style: 'destructive',
-                    onPress: async () => {
-                      try {
-                        // Get all approved members
-                        const membersQuery = query(
-                          collection(db, 'users'),
-                          where('approved', '==', true),
-                          where('deleted', '==', false)
-                        );
-                        const membersSnapshot = await getDocs(membersQuery);
-                        const memberIds = membersSnapshot.docs.map(doc => doc.id);
+                    onPress: () => {
+                      // Second confirmation
+                      Alert.alert(
+                        '⚠️ Confirm Emergency',
+                        'This will create an emergency chat and notify ALL members. Please confirm this is a real emergency.',
+                        [
+                          { text: 'Cancel', style: 'cancel' },
+                          {
+                            text: 'SEND SOS',
+                            style: 'destructive',
+                            onPress: async () => {
+                              try {
+                                // Get all approved members
+                                const membersQuery = query(
+                                  collection(db, 'users'),
+                                  where('approved', '==', true),
+                                  where('deleted', '==', false)
+                                );
+                                const membersSnapshot = await getDocs(membersQuery);
+                                const memberIds = membersSnapshot.docs.map(doc => doc.id);
 
-                        // Create emergency group chat
-                        const chatData = {
-                          type: 'group',
-                          name: '🚨 EMERGENCY SOS',
-                          participants: memberIds,
-                          createdAt: new Date().toISOString(),
-                          updatedAt: new Date().toISOString(),
-                        };
+                                // Check for existing emergency chat
+                                const existingChatQuery = query(
+                                  collection(db, 'chats'),
+                                  where('name', '==', '🚨 EMERGENCY SOS'),
+                                  where('participants', 'array-contains', user.id)
+                                );
+                                const existingChats = await getDocs(existingChatQuery);
 
-                        const chatRef = await addDoc(collection(db, 'chats'), chatData);
+                                let chatId;
+                                if (!existingChats.empty) {
+                                  // Use existing emergency chat
+                                  chatId = existingChats.docs[0].id;
+                                } else {
+                                  // Create new emergency group chat
+                                  const chatData = {
+                                    type: 'group',
+                                    name: '🚨 EMERGENCY SOS',
+                                    participants: memberIds,
+                                    createdAt: new Date().toISOString(),
+                                    updatedAt: new Date().toISOString(),
+                                  };
+                                  const chatRef = await addDoc(collection(db, 'chats'), chatData);
+                                  chatId = chatRef.id;
+                                }
 
-                        // Add emergency message
-                        const messageData = {
-                          content: '🚨 EMERGENCY SOS: PLEASE CALL\n\nEmergency assistance needed.',
-                          senderId: user.id,
-                          senderName: user.fullName,
-                          senderPhotoURL: user.photoURL,
-                          timestamp: new Date().toISOString(),
-                          type: 'text',
-                          statusMap: {
-                            [user.id]: 'sent'
+                                // Get user's location if available
+                                let locationStr = '';
+                                try {
+                                  const { status } = await Location.requestForegroundPermissionsAsync();
+                                  if (status === 'granted') {
+                                    const location = await Location.getCurrentPositionAsync({});
+                                    locationStr = `\n\nLocation: https://maps.google.com/?q=${location.coords.latitude},${location.coords.longitude}`;
+                                  }
+                                } catch (error) {
+                                  console.log('Error getting location:', error);
+                                }
+
+                                // Add emergency message
+                                const messageData = {
+                                  content: `🚨 EMERGENCY SOS: PLEASE CALL ${user.phoneNumber || ''}\n\nEmergency assistance needed by ${user.fullName}.${locationStr}`,
+                                  senderId: user.id,
+                                  senderName: user.fullName,
+                                  senderPhotoURL: user.photoURL,
+                                  timestamp: new Date().toISOString(),
+                                  type: 'text',
+                                  statusMap: {
+                                    [user.id]: 'sent'
+                                  }
+                                };
+
+                                await addDoc(collection(db, 'chats', chatId, 'messages'), messageData);
+
+                                // Update chat's last message
+                                await updateDoc(doc(db, 'chats', chatId), {
+                                  lastMessage: messageData,
+                                  updatedAt: new Date().toISOString(),
+                                });
+
+                                // Navigate to the emergency chat
+                                router.push(`/chat/${chatId}`);
+                              } catch (error) {
+                                console.error('Error sending SOS:', error);
+                                Alert.alert('Error', 'Failed to send SOS. Please try again.');
+                              }
+                            }
                           }
-                        };
-
-                        await addDoc(collection(db, 'chats', chatRef.id, 'messages'), messageData);
-
-                        // Update chat's last message
-                        await updateDoc(doc(db, 'chats', chatRef.id), {
-                          lastMessage: messageData,
-                          updatedAt: new Date().toISOString(),
-                        });
-
-                        router.push(`/chat/${chatRef.id}`);
-                      } catch (error) {
-                        console.error('Error sending SOS:', error);
-                        Alert.alert('Error', 'Failed to send SOS. Please try again.');
-                      }
+                        ]
+                      );
                     }
                   }
                 ]
@@ -1003,6 +1045,7 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 12,
     margin: 16,
+    marginTop: 8,
     gap: 8,
     shadowColor: '#000',
     shadowOffset: {
@@ -1012,6 +1055,8 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
     elevation: 5,
+    borderWidth: 1,
+    borderColor: '#FF1A1A',
   },
   sosButtonText: {
     color: '#ffffff',
