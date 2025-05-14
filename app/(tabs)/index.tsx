@@ -640,8 +640,8 @@ export default function MemberDashboard() {
               ))}
             </ScrollView>
           </View>
-
-          <TouchableOpacity
+        </ScrollView>
+        <TouchableOpacity
             style={styles.sosButton}
             onPress={() => {
               // First confirmation
@@ -725,6 +725,7 @@ export default function MemberDashboard() {
                                 };
 
                                 await addDoc(collection(db, 'chats', chatId, 'messages'), messageData);
+                                 //const chatRef = await addDoc(collection(db, 'chats'), messageData);
 
                                 // Update chat's last message
                                 await updateDoc(doc(db, 'chats', chatId), {
@@ -734,6 +735,7 @@ export default function MemberDashboard() {
 
                                 // Navigate to the emergency chat
                                 router.push(`/chat/${chatId}`);
+                                //router.push(`/chat/${chatRef.id}`);
                               } catch (error) {
                                 console.error('Error sending SOS:', error);
                                 Alert.alert('Error', 'Failed to send SOS. Please try again.');
@@ -751,8 +753,6 @@ export default function MemberDashboard() {
             <AlertOctagon size={24} color="#ffffff" />
             <Text style={styles.sosButtonText}>Emergency SOS</Text>
           </TouchableOpacity>
-
-        </ScrollView>
       </View>
     </KeyboardAvoidingView>
   );

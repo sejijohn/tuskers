@@ -68,6 +68,7 @@ export default function ChatLayout() {
         name="[id]" 
         options={({ route }) => ({ 
           headerShown: true,
+          headerBackVisible: true,
           headerStyle: {
             backgroundColor: '#243c44',
           },
