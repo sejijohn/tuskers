@@ -312,7 +312,15 @@ export default function ChatList() {
     //const hasEnded = new Date(activePoll.endsAt).getTime() <= new Date().getTime();
     const hasEnded = activePoll.endsAt.toDate().getTime() <= new Date().getTime();
     const canDelete = hasEnded || user?.id === activePoll.createdBy || user?.role === 'admin';
-    console.log('canDelete:', canDelete);
+    //console.log('canDelete:', canDelete);
+    const shortenUrl = (url: string) => {
+      try {
+        const { hostname } = new URL(url);
+        return hostname.length > 30 ? hostname.slice(0, 27) + '...' : hostname;
+      } catch {
+        return url.length > 30 ? url.slice(0, 27) + '...' : url;
+      }
+    };
 
     return (
       <View style={styles.pollContainer}>
@@ -346,6 +354,7 @@ export default function ChatList() {
                   Alert.alert("Can't open this URL:", url);
                 }
               },
+              renderText: shortenUrl,
             },
           ]}
           childrenProps={{ allowFontScaling: false }}

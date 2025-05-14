@@ -251,6 +251,15 @@ export default function PollsScreen() {
     return poll.options.reduce((sum, option) => sum + option.votes.length, 0);
   };
 
+  const shortenUrl = (url: string) => {
+    try {
+      const { hostname } = new URL(url);
+      return hostname.length > 30 ? hostname.slice(0, 27) + '...' : hostname;
+    } catch {
+      return url.length > 30 ? url.slice(0, 27) + '...' : url;
+    }
+  };
+
 
 
 
@@ -346,6 +355,7 @@ export default function PollsScreen() {
                                 Alert.alert("Can't open this URL:", url);
                               }
                             },
+                            renderText: shortenUrl,
                           },
                         ]}
                         childrenProps={{ allowFontScaling: false }}

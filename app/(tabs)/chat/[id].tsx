@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { StyleSheet, View, Text, TextInput, TouchableOpacity, FlatList, KeyboardAvoidingView, Platform, Image, Modal, ViewToken } from 'react-native';
+import { StyleSheet, View, Text, TextInput, TouchableOpacity, FlatList, KeyboardAvoidingView, Platform, Image, Modal, ViewToken, Linking, Alert } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { collection, query, orderBy, onSnapshot, addDoc, doc, getDoc, updateDoc } from 'firebase/firestore';
 import { Send, Users, X } from 'lucide-react-native';
@@ -7,6 +7,7 @@ import { db } from '../../utils/firebase';
 import { useUser } from '../../context/UserContext';
 import { Message, Chat } from '../../types/chat';
 import { User } from '../../types/user';
+import ParsedText from 'react-native-parsed-text';
 
 export default function ChatRoom() {
   const { id } = useLocalSearchParams();
@@ -56,9 +57,9 @@ export default function ChatRoom() {
           // Clear any previous listeners
           Object.values(memberUnsubscribes.current).forEach((unsub) => unsub());
           memberUnsubscribes.current = {};
-        
+
           const newMembers: Record<string, User> = {};
-        
+
           chatData.participants.forEach((participantId) => {
             const userRef = doc(db, 'users', participantId);
             const unsubscribe = onSnapshot(userRef, (docSnap) => {
@@ -72,7 +73,7 @@ export default function ChatRoom() {
                 });
               }
             });
-        
+
             memberUnsubscribes.current[participantId] = unsubscribe;
           });
         }
@@ -135,7 +136,7 @@ export default function ChatRoom() {
       setMessages(messageList);
     });
 
-    return () => {unsubscribe();Object.values(memberUnsubscribes.current).forEach((unsub) => unsub());}
+    return () => { unsubscribe(); Object.values(memberUnsubscribes.current).forEach((unsub) => unsub()); }
   }, [id]);
 
   const onViewableItemsChanged = useCallback(
@@ -251,12 +252,38 @@ export default function ChatRoom() {
           {!isOwnMessage && (
             <Text style={styles.senderName}>{item.senderName}</Text>
           )}
-          <Text style={[
+          {/* <Text style={[
             styles.messageText,
             isOwnMessage ? styles.ownMessageText : styles.otherMessageText
           ]}>
             {item.content}
-          </Text>
+          </Text> */}
+          <ParsedText
+            style={[
+              styles.messageText,
+              isOwnMessage ? styles.ownMessageText : styles.otherMessageText
+            ]}
+            parse={[
+              {
+                type: 'url',
+                style: {
+                  color: isOwnMessage ? '#269999' : '#3dd9d6', // Darker teal for own messages
+                  textDecorationLine: 'underline'
+                },
+                onPress: async (url) => {
+                  const supported = await Linking.canOpenURL(url);
+                  if (supported) {
+                    Linking.openURL(url);
+                  } else {
+                    Alert.alert("Can't open this URL:", url);
+                  }
+                }
+              }
+            ]}
+            childrenProps={{ allowFontScaling: false }}
+          >
+            {item.content}
+          </ParsedText>
           <Text style={styles.timestamp}>
             {new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
           </Text>
