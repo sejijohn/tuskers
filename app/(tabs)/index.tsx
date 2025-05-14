@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { StyleSheet, View, Text, ScrollView, TextInput, TouchableOpacity, Alert, Image, AppState, Linking, KeyboardAvoidingView, Platform} from 'react-native';
-import { doc, getDoc, collection, query, where, getDocs, orderBy, onSnapshot, addDoc, deleteDoc } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, getDocs, orderBy, onSnapshot, addDoc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { useRouter } from 'expo-router';
-import { Send, Trash2, Cloud, CloudRain, Sun, Wind, CloudLightning, CloudSnow, CloudFog, Users, Calendar } from 'lucide-react-native';
+import { Send, Trash2, Cloud, CloudRain, Sun, Wind, CloudLightning, CloudSnow, CloudFog, Users, Calendar, AlertOctagon } from 'lucide-react-native';
 import { auth, db } from '../utils/firebase';
 import { User } from '../types/user';
 import { Update } from '../types/update';
@@ -395,14 +395,11 @@ export default function MemberDashboard() {
   };
 
   return (
-
-    // <KeyboardAvoidingWrapper>
     <KeyboardAvoidingView 
-    style={styles.container}
-    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
-  >
-
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+    >
       <View style={styles.container}>
         <ScrollView style={styles.content}>
           <View style={styles.imageContainer}>
@@ -643,12 +640,78 @@ export default function MemberDashboard() {
               ))}
             </ScrollView>
           </View>
+
+          <TouchableOpacity
+            style={styles.sosButton}
+            onPress={() => {
+              Alert.alert(
+                'Emergency SOS',
+                'This will create an emergency group chat and notify all members. Are you sure?',
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  {
+                    text: 'Send SOS',
+                    style: 'destructive',
+                    onPress: async () => {
+                      try {
+                        // Get all approved members
+                        const membersQuery = query(
+                          collection(db, 'users'),
+                          where('approved', '==', true),
+                          where('deleted', '==', false)
+                        );
+                        const membersSnapshot = await getDocs(membersQuery);
+                        const memberIds = membersSnapshot.docs.map(doc => doc.id);
+
+                        // Create emergency group chat
+                        const chatData = {
+                          type: 'group',
+                          name: '🚨 EMERGENCY SOS',
+                          participants: memberIds,
+                          createdAt: new Date().toISOString(),
+                          updatedAt: new Date().toISOString(),
+                        };
+
+                        const chatRef = await addDoc(collection(db, 'chats'), chatData);
+
+                        // Add emergency message
+                        const messageData = {
+                          content: '🚨 EMERGENCY SOS: PLEASE CALL\n\nEmergency assistance needed.',
+                          senderId: user.id,
+                          senderName: user.fullName,
+                          senderPhotoURL: user.photoURL,
+                          timestamp: new Date().toISOString(),
+                          type: 'text',
+                          statusMap: {
+                            [user.id]: 'sent'
+                          }
+                        };
+
+                        await addDoc(collection(db, 'chats', chatRef.id, 'messages'), messageData);
+
+                        // Update chat's last message
+                        await updateDoc(doc(db, 'chats', chatRef.id), {
+                          lastMessage: messageData,
+                          updatedAt: new Date().toISOString(),
+                        });
+
+                        router.push(`/chat/${chatRef.id}`);
+                      } catch (error) {
+                        console.error('Error sending SOS:', error);
+                        Alert.alert('Error', 'Failed to send SOS. Please try again.');
+                      }
+                    }
+                  }
+                ]
+              );
+            }}
+          >
+            <AlertOctagon size={24} color="#ffffff" />
+            <Text style={styles.sosButtonText}>Emergency SOS</Text>
+          </TouchableOpacity>
+
         </ScrollView>
       </View>
-
-      
-    {/* </KeyboardAvoidingWrapper> */}
-
     </KeyboardAvoidingView>
   );
 }
@@ -882,7 +945,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     minHeight: 40,
     maxHeight: 100,
-
   },
   postButton: {
     width: 40,
@@ -932,5 +994,28 @@ const styles = StyleSheet.create({
   },
   deleteButtonDisabled: {
     opacity: 0.5,
+  },
+  sosButton: {
+    backgroundColor: '#FF3B30',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+    borderRadius: 12,
+    margin: 16,
+    gap: 8,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  sosButtonText: {
+    color: '#ffffff',
+    fontSize: 18,
+    fontWeight: 'bold',
   },
 });
