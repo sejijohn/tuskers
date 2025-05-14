@@ -60,7 +60,6 @@ export default function MemberDashboard() {
   const [loadingPoll, setLoadingPoll] = useState(true);
   const appState = useRef(AppState.currentState);
 
-
   useFocusEffect(
     useCallback(() => {
       fetchWeather();
@@ -167,7 +166,6 @@ export default function MemberDashboard() {
       new Promise<Location.LocationObject>((_, reject) => setTimeout(() => reject(new Error('Location timeout')), timeout)),
     ]);
   };
-
 
   const fetchWeather = async () => {
     try {
@@ -366,6 +364,91 @@ export default function MemberDashboard() {
   const getWinningOption = (poll: Poll) => {
     return poll.options.reduce((prev, current) =>
       current.votes.length > prev.votes.length ? current : prev
+    );
+  };
+
+  const handleEmergencySOS = async () => {
+    if (!user) return;
+
+    Alert.alert(
+      '🚨 Emergency SOS',
+      'This will alert all members. Are you sure you need emergency assistance?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Continue',
+          style: 'destructive',
+          onPress: async () => {
+            Alert.alert(
+              '⚠️ Confirm Emergency',
+              'This will create an emergency chat and notify ALL members. Please confirm this is a real emergency.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'SEND SOS',
+                  style: 'destructive',
+                  onPress: async () => {
+                    try {
+                      const membersQuery = query(
+                        collection(db, 'users'),
+                        where('approved', '==', true),
+                        where('deleted', '==', false)
+                      );
+                      const membersSnapshot = await getDocs(membersQuery);
+                      const memberIds = membersSnapshot.docs.map(doc => doc.id);
+
+                      const chatData = {
+                        type: 'group',
+                        name: '🚨 EMERGENCY SOS',
+                        participants: memberIds,
+                        createdAt: new Date().toISOString(),
+                        updatedAt: new Date().toISOString(),
+                      };
+
+                      const chatRef = await addDoc(collection(db, 'chats'), chatData);
+
+                      let locationStr = '';
+                      try {
+                        const { status } = await Location.requestForegroundPermissionsAsync();
+                        if (status === 'granted') {
+                          const location = await Location.getCurrentPositionAsync({});
+                          locationStr = `\n\nLocation: https://maps.google.com/?q=${location.coords.latitude},${location.coords.longitude}`;
+                        }
+                      } catch (error) {
+                        console.log('Error getting location:', error);
+                      }
+
+                      const messageData = {
+                        content: `🚨 EMERGENCY SOS: PLEASE CALL ${user.phoneNumber || 'MEMBER'}\n\nEmergency assistance needed by ${user.fullName}.${locationStr}`,
+                        senderId: user.id,
+                        senderName: user.fullName,
+                        senderPhotoURL: user.photoURL,
+                        timestamp: new Date().toISOString(),
+                        type: 'text',
+                        statusMap: {
+                          [user.id]: 'sent'
+                        }
+                      };
+
+                      await addDoc(collection(db, 'chats', chatRef.id, 'messages'), messageData);
+
+                      await updateDoc(doc(db, 'chats', chatRef.id), {
+                        lastMessage: messageData,
+                        updatedAt: new Date().toISOString(),
+                      });
+
+                      router.push(`/chat/${chatRef.id}`);
+                    } catch (error) {
+                      console.error('Error sending SOS:', error);
+                      Alert.alert('Error', 'Failed to send SOS. Please try again.');
+                    }
+                  }
+                }
+              ]
+            );
+          }
+        }
+      ]
     );
   };
 
@@ -642,117 +725,12 @@ export default function MemberDashboard() {
           </View>
         </ScrollView>
         <TouchableOpacity
-            style={styles.sosButton}
-            onPress={() => {
-              // First confirmation
-              Alert.alert(
-                '🚨 Emergency SOS',
-                'This will alert all members. Are you sure you need emergency assistance?',
-                [
-                  { text: 'Cancel', style: 'cancel' },
-                  {
-                    text: 'Continue',
-                    style: 'destructive',
-                    onPress: () => {
-                      // Second confirmation
-                      Alert.alert(
-                        '⚠️ Confirm Emergency',
-                        'This will create an emergency chat and notify ALL members. Please confirm this is a real emergency.',
-                        [
-                          { text: 'Cancel', style: 'cancel' },
-                          {
-                            text: 'SEND SOS',
-                            style: 'destructive',
-                            onPress: async () => {
-                              try {
-                                // Get all approved members
-                                const membersQuery = query(
-                                  collection(db, 'users'),
-                                  where('approved', '==', true),
-                                  where('deleted', '==', false)
-                                );
-                                const membersSnapshot = await getDocs(membersQuery);
-                                const memberIds = membersSnapshot.docs.map(doc => doc.id);
-
-                                // Check for existing emergency chat
-                                const existingChatQuery = query(
-                                  collection(db, 'chats'),
-                                  where('name', '==', '🚨 EMERGENCY SOS'),
-                                  where('participants', 'array-contains', user.id)
-                                );
-                                const existingChats = await getDocs(existingChatQuery);
-
-                                let chatId;
-                                if (!existingChats.empty) {
-                                  // Use existing emergency chat
-                                  chatId = existingChats.docs[0].id;
-                                } else {
-                                  // Create new emergency group chat
-                                  const chatData = {
-                                    type: 'group',
-                                    name: '🚨 EMERGENCY SOS',
-                                    participants: memberIds,
-                                    createdAt: new Date().toISOString(),
-                                    updatedAt: new Date().toISOString(),
-                                  };
-                                  const chatRef = await addDoc(collection(db, 'chats'), chatData);
-                                  chatId = chatRef.id;
-                                }
-
-                                // Get user's location if available
-                                let locationStr = '';
-                                try {
-                                  const { status } = await Location.requestForegroundPermissionsAsync();
-                                  if (status === 'granted') {
-                                    const location = await Location.getCurrentPositionAsync({});
-                                    locationStr = `\n\nLocation: https://maps.google.com/?q=${location.coords.latitude},${location.coords.longitude}`;
-                                  }
-                                } catch (error) {
-                                  console.log('Error getting location:', error);
-                                }
-
-                                // Add emergency message
-                                const messageData = {
-                                  content: `🚨 EMERGENCY SOS: PLEASE CALL ${user.phoneNumber || ''}\n\nEmergency assistance needed by ${user.fullName}.${locationStr}`,
-                                  senderId: user.id,
-                                  senderName: user.fullName,
-                                  senderPhotoURL: user.photoURL,
-                                  timestamp: new Date().toISOString(),
-                                  type: 'text',
-                                  statusMap: {
-                                    [user.id]: 'sent'
-                                  }
-                                };
-
-                                await addDoc(collection(db, 'chats', chatId, 'messages'), messageData);
-                                 //const chatRef = await addDoc(collection(db, 'chats'), messageData);
-
-                                // Update chat's last message
-                                await updateDoc(doc(db, 'chats', chatId), {
-                                  lastMessage: messageData,
-                                  updatedAt: new Date().toISOString(),
-                                });
-
-                                // Navigate to the emergency chat
-                                router.push(`/chat/${chatId}`);
-                                //router.push(`/chat/${chatRef.id}`);
-                              } catch (error) {
-                                console.error('Error sending SOS:', error);
-                                Alert.alert('Error', 'Failed to send SOS. Please try again.');
-                              }
-                            }
-                          }
-                        ]
-                      );
-                    }
-                  }
-                ]
-              );
-            }}
-          >
-            <AlertOctagon size={24} color="#ffffff" />
-            <Text style={styles.sosButtonText}>Emergency SOS</Text>
-          </TouchableOpacity>
+          style={styles.sosButton}
+          onPress={handleEmergencySOS}
+        >
+          <AlertOctagon size={24} color="#ffffff" />
+          <Text style={styles.sosButtonText}>Emergency SOS</Text>
+        </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>
   );
@@ -875,6 +853,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   ridingMessage: {
+    
     fontSize: 14,
     color: '#ffffff',
     opacity: 0.8,
