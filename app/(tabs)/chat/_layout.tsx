@@ -6,11 +6,16 @@ import { db } from '../../utils/firebase';
 import { Chat } from '../../types/chat';
 import { User } from '../../types/user';
 import { useUser } from '../../context/UserContext';
+import { TouchableOpacity } from 'react-native';
+import { ChevronLeft } from 'lucide-react-native';
+import { useRouter } from 'expo-router';
 
 export default function ChatLayout() {
+  const router = useRouter();
   const { user: currentUser } = useUser();
   const [chatTitles, setChatTitles] = useState<Record<string, string>>({});
   const pathname = usePathname();
+
 
   const getChatTitle = useCallback(async (chatId: string) => {
     try {
@@ -68,7 +73,7 @@ export default function ChatLayout() {
         name="[id]" 
         options={({ route }) => ({ 
           headerShown: true,
-          headerBackVisible: true,
+          //headerBackVisible: true,
           headerStyle: {
             backgroundColor: '#243c44',
           },
@@ -76,6 +81,14 @@ export default function ChatLayout() {
           headerTitleStyle: {
             color: '#3dd9d6',
           },
+          headerLeft: () => (
+            <TouchableOpacity 
+              onPress={() => router.push('/chat')}
+              style={{ marginLeft: 8 }}
+            >
+              <ChevronLeft size={24} color="#3dd9d6" />
+            </TouchableOpacity>
+          ),
           title: chatTitles[route.params?.id as string] || 'Chat',
         })} 
       />
