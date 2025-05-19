@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Alert, TextInput, Linking } from 'react-native';
 import { useRouter } from 'expo-router';
 import { collection, query, where, onSnapshot, doc, updateDoc, getDoc, increment, getDocs } from 'firebase/firestore';
-import { Timer, Users, CheckCircle2, CreditCard as Edit2, Save, X } from 'lucide-react-native';
+import { Timer, Users, CheckCircle2, CreditCard as Edit2, Save, X, Trash2 } from 'lucide-react-native';
 import { db } from '../utils/firebase';
 import { useUser } from '../context/UserContext';
 import { Poll } from '../types/poll';
@@ -11,33 +11,34 @@ import { User } from '../types/user';
 import ParsedText from 'react-native-parsed-text';
 
 export default function CompletedPollsScreen() {
-    const router = useRouter();
+  const router = useRouter();
   const { user } = useUser();
   const [polls, setPolls] = useState<Poll[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingPoll, setEditingPoll] = useState<string | null>(null);
   const [editedQuestion, setEditedQuestion] = useState('');
+  const [users, setUsers] = useState<Record<string, User>>({});
 
   useEffect(() => {
-        if (!user) return;
-    
-        const fetchUsers = async () => {
-          const usersRef = collection(db, 'users');
-          const usersSnapshot = await getDocs(usersRef);
-          const usersMap: Record<string, User> = {};
-          usersSnapshot.forEach((doc) => {
-            usersMap[doc.id] = { id: doc.id, ...doc.data() } as User;
-          });
-          setUsers(usersMap);
-        };
-    
-        fetchUsers();
-    
-        const q = query(
-          collection(db, 'polls'),
-          where('isActive', '==', false),
-          where('isComplete', '==', true),
-        );
+    if (!user) return;
+
+    const fetchUsers = async () => {
+      const usersRef = collection(db, 'users');
+      const usersSnapshot = await getDocs(usersRef);
+      const usersMap: Record<string, User> = {};
+      usersSnapshot.forEach((doc) => {
+        usersMap[doc.id] = { id: doc.id, ...doc.data() } as User;
+      });
+      setUsers(usersMap);
+    };
+
+    fetchUsers();
+
+    const q = query(
+      collection(db, 'polls'),
+      where('isActive', '==', false),
+      where('isComplete', '==', true),
+    );
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const pollsList: Poll[] = [];
       snapshot.forEach((doc) => {
@@ -53,120 +54,36 @@ export default function CompletedPollsScreen() {
     return () => unsubscribe();
   }, [user]);
 
-  const handleVote = async (optionId: string, poll: Poll) => {
-        if (!user) return;
-
-        try {
-            const isVoting = poll.options.find(option => option.votes.includes(user.id));
-
-            if(isVoting && isVoting.id === optionId){
-                await updateDoc(doc(db, 'polls', poll.id), {
-                    options: poll.options.map(option => ({
-                        ...option,
-                        votes: option.id === optionId ? option.votes.filter(userId => userId !== user.id) : option.votes,
-                    })),
-                });
-
-                // Check if the user is deselecting "Yes, I am joining the ride."
-                const previousVote = poll.options.find(option => option.votes.includes(user.id));
-                if (
-                  poll.ridePoll &&
-                  previousVote &&
-                  previousVote.text === "Yes, I am joining the ride." &&
-                  optionId === previousVote.id
-                ) {
-                  // Decrement the rideCounter
-                  const userDocRef = doc(db, 'users', user.id);
-                  const userDoc = await getDoc(userDocRef);
-                  if (userDoc.exists()) {
-                    const userData = userDoc.data();
-                    if (userData.rideCounter && userData.rideCounter > 0) {
-                      await updateDoc(userDocRef, { rideCounter: increment(-1) });
-                    }
-                  }
-                }
-                return;
-            }
-
-            await updateDoc(doc(db, 'polls', poll.id), {
-                options: poll.options.map(option => ({
-                    ...option,
-                    votes: option.id === optionId ? [...option.votes, user.id] : option.votes.filter(userId => userId !== user.id),
-                })),
-            });
-
-            // Handle rideCounter for ride polls
-            if (poll.ridePoll) {
-                const selectedOption = poll.options.find(option => option.id === optionId);
-                // Check if the user is voting for "Yes, I am joining the ride."
-                if (selectedOption && selectedOption.text === "Yes, I am joining the ride.") {
-                    // Increment the rideCounter
-                    const userDocRef = doc(db, 'users', user.id);
-                    const userDoc = await getDoc(userDocRef);
-                    if (userDoc.exists()) {
-                      const userData = userDoc.data();
-                      if (userData.rideCounter) {
-                        await updateDoc(userDocRef, { rideCounter: increment(1) });
-                      } else {
-                        await updateDoc(userDocRef, { rideCounter: 1 });
-                      }
-                    }
-                } else {
-                    // Check if the user is deselecting "Yes, I am joining the ride."
-                    const previousVote = poll.options.find(option => option.votes.includes(user.id));
-                    if (
-                      poll.ridePoll &&
-                      previousVote &&
-                      previousVote.text === "Yes, I am joining the ride." &&
-                      optionId !== previousVote.id
-                    ) {
-                      // Decrement the rideCounter
-                      const userDocRef = doc(db, 'users', user.id);
-                      const userDoc = await getDoc(userDocRef);
-                      if (userDoc.exists()) {
-                        const userData = userDoc.data();
-                        if (userData.rideCounter && userData.rideCounter > 0) {
-                          await updateDoc(userDocRef, { rideCounter: increment(-1) });
-                        }
-                      }
-                    }
-                }
-            }
-        
-    } catch (error) {
-      console.error('Error voting:', error);
-      Alert.alert('Error', 'Failed to submit vote. Please try again.');
-    }
-  };
-
-  const startEditing = (poll: Poll) => {
-    if (user?.id !== poll.createdBy && user?.role !== 'admin') {
-      Alert.alert('Error', 'You do not have permission to edit this poll');
+  const handleDeletePoll = async (pollId: string) => {
+    if (!user || user.role !== 'admin') {
+      Alert.alert('Error', 'Only admins can delete completed polls');
       return;
     }
-    setEditingPoll(poll.id);
-    setEditedQuestion(poll.question);
+
+    Alert.alert(
+      'Delete Poll',
+      'Are you sure you want to delete this completed poll?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await updateDoc(doc(db, 'polls', pollId), {
+                isActive: false,
+                isComplete: false,
+                deleted: true
+              });
+            } catch (error) {
+              console.error('Error deleting poll:', error);
+              Alert.alert('Error', 'Failed to delete poll');
+            }
+          }
+        }
+      ]
+    );
   };
-
-  const saveEdit = async (pollId: string) => {
-    try {
-      if (!editedQuestion.trim()) {
-        Alert.alert('Error', 'Question cannot be empty');
-        return;
-      }
-
-      await updateDoc(doc(db, 'polls', pollId), {
-        question: editedQuestion.trim(),
-      });
-
-      setEditingPoll(null);
-      setEditedQuestion('');
-    } catch (error) {
-      console.error('Error updating poll:', error);
-      Alert.alert('Error', 'Failed to update poll');
-    }
-  };
-    const [users, setUsers] = useState<Record<string, User>>({});
 
   const getTimeLeft = (endsAt: Timestamp) => {
     const end = endsAt.toDate().getTime();
@@ -184,22 +101,6 @@ export default function CompletedPollsScreen() {
     return `${minutes}m left`;
   };
 
-  const hasVoted = (poll: Poll) => {
-    return poll.options.some(option => option.votes.includes(user?.id || ''));
-  };
-
-  const getUserVote = (poll: Poll) => {
-    return poll.options.find(option => option.votes.includes(user?.id || ''));
-  };
-
-  const getTotalVotes = (poll: Poll) => {
-    return poll.options.reduce((sum, option) => sum + option.votes.length, 0);
-  };
-
-  const getVotePercentage = (votes: number, total: number) => {
-    if (total === 0) return 0;
-    return Math.round((votes / total) * 100);
-  };
   const shortenUrl = (url: string) => {
     try {
       const { hostname } = new URL(url);
@@ -230,84 +131,53 @@ export default function CompletedPollsScreen() {
           </View>
         ) : (
           polls.map((poll) => {
-            const totalVotes = getTotalVotes(poll);
-            const userVote = getUserVote(poll);
-            const hasUserVoted = hasVoted(poll);
-            const isActive = poll.endsAt.toDate().getTime() > new Date().getTime();
-            const canEdit = user?.id === poll.createdBy || user?.role === 'admin';
             const voters = poll.options.flatMap(option => option.votes);
             const uniqueVoters = [...new Set(voters)];
             return (
               <View key={poll.id} style={styles.pollCard}>
                 <View style={styles.pollHeader}>
-                  {editingPoll === poll.id ? (
-                    <View style={styles.editContainer}>
-                      <TextInput
-                        style={styles.editInput}
-                        value={editedQuestion}
-                        onChangeText={setEditedQuestion}
-                        multiline
-                      />
-                      <View style={styles.editActions}>
-                        <TouchableOpacity
-                          onPress={() => saveEdit(poll.id)}
-                          style={styles.editButton}
-                        >
-                          <Save size={20} color="#3dd9d6" />
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          onPress={() => setEditingPoll(null)}
-                          style={[styles.editButton, styles.cancelButton]}
-                        >
-                          <X size={20} color="#FF6B4A" />
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  ) : (
-                    <>
-                      {/* <Text style={styles.pollQuestion}>{poll.question}</Text> */}
-                       <ParsedText
-                                style={styles.pollQuestion}
-                                parse={[
-                                  {
-                                    type: 'url',
-                                    style: { color: '#3dd9d6', textDecorationLine: 'underline' },
-                                    onPress: async (url) => {
-                                      const supported = await Linking.canOpenURL(url);
-                                      if (supported) {
-                                        Linking.openURL(url);
-                                      } else {
-                                        Alert.alert("Can't open this URL:", url);
-                                      }
-                                    },
-                                    renderText: shortenUrl,
-                                  },
-                                ]}
-                                childrenProps={{ allowFontScaling: false }}
-                              >
-                                {poll.question}
-                              </ParsedText>
-                      {canEdit && (
-                        <TouchableOpacity
-                          onPress={() => startEditing(poll)}
-                          style={styles.editButton}
-                        >
-                          <Edit2 size={20} color="#3dd9d6" />
-                        </TouchableOpacity>
-                      )}
-                    </>
+                  <ParsedText
+                    style={styles.pollQuestion}
+                    parse={[
+                      {
+                        type: 'url',
+                        style: { color: '#3dd9d6', textDecorationLine: 'underline' },
+                        onPress: async (url) => {
+                          const supported = await Linking.canOpenURL(url);
+                          if (supported) {
+                            Linking.openURL(url);
+                          } else {
+                            Alert.alert("Can't open this URL:", url);
+                          }
+                        },
+                        renderText: shortenUrl,
+                      },
+                    ]}
+                    childrenProps={{ allowFontScaling: false }}
+                  >
+                    {poll.question}
+                  </ParsedText>
+                  {user?.role === 'admin' && (
+                    <TouchableOpacity
+                      onPress={() => handleDeletePoll(poll.id)}
+                      style={styles.deleteButton}
+                    >
+                      <Trash2 size={20} color="#FF6B4A" />
+                    </TouchableOpacity>
                   )}
-                  <View style={styles.pollMeta}>
-                    <View style={styles.metaItem}>
-                      <Timer size={16} color="#3dd9d6" />
-                      <Text style={styles.metaText}>{getTimeLeft(poll.endsAt)}</Text>
-                    </View>
-                    <View style={styles.metaItem}>
-                      <Users size={16} color="#3dd9d6" />
-                      <Text style={styles.metaText}>{totalVotes} votes</Text>
-                    </View>
+                </View>
+
+                <View style={styles.pollMeta}>
+                  <View style={styles.metaItem}>
+                    <Timer size={16} color="#3dd9d6" />
+                    <Text style={styles.metaText}>{getTimeLeft(poll.endsAt)}</Text>
+                  </View>
+                  <View style={styles.metaItem}>
+                    <Users size={16} color="#3dd9d6" />
+                    <Text style={styles.metaText}>{uniqueVoters.length} votes</Text>
                   </View>
                 </View>
+
                 <View style={styles.votersList}>
                   {uniqueVoters.length > 0 ? (
                     uniqueVoters.map(voterId => (
@@ -318,7 +188,7 @@ export default function CompletedPollsScreen() {
                       </View>
                     ))
                   ) : (
-                    <Text style={styles.noVoters}>No votes yet</Text>
+                    <Text style={styles.noVoters}>No votes recorded</Text>
                   )}
                 </View>
 
@@ -367,17 +237,30 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   pollHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
     marginBottom: 16,
   },
   pollQuestion: {
     fontSize: 18,
     fontWeight: '600',
     color: '#3dd9d6',
-    marginBottom: 8,
+    flex: 1,
+    marginRight: 12,
+  },
+  deleteButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255, 107, 74, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   pollMeta: {
     flexDirection: 'row',
     gap: 16,
+    marginBottom: 16,
   },
   metaItem: {
     flexDirection: 'row',
@@ -389,59 +272,23 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     opacity: 0.8,
   },
-  options: {
-    gap: 12,
+  votersList: {
+    marginTop: 16,
+    gap: 8,
   },
-  option: {
+  voterCard: {
     backgroundColor: 'rgba(61, 217, 214, 0.1)',
     borderRadius: 8,
     padding: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(61, 217, 214, 0.2)',
   },
-  selectedOption: {
-    backgroundColor: 'rgba(61, 217, 214, 0.2)',
-    borderColor: '#3dd9d6',
-  },
-  inactiveOption: {
-    opacity: 0.7,
-  },
-  optionContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  optionText: {
-    fontSize: 16,
+  voterName: {
     color: '#ffffff',
-    flex: 1,
-  },
-  selectedOptionText: {
-    color: '#3dd9d6',
-    fontWeight: '600',
-  },
-  resultBar: {
-    height: 24,
-    backgroundColor: 'rgba(61, 217, 214, 0.1)',
-    borderRadius: 12,
-    marginTop: 8,
-    overflow: 'hidden',
-    position: 'relative',
-  },
-  resultFill: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(61, 217, 214, 0.2)',
-    borderRadius: 12,
-  },
-  percentage: {
-    position: 'absolute',
-    right: 8,
-    top: 2,
     fontSize: 14,
-    color: '#ffffff',
+  },
+  noVoters: {
+    color: 'rgba(255, 255, 255, 0.6)',
+    fontStyle: 'italic',
+    textAlign: 'center',
   },
   pollFooter: {
     marginTop: 16,
@@ -476,54 +323,4 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     marginBottom: 16,
   },
-  editContainer: {
-    marginBottom: 8,
-  },
-  editInput: {
-    backgroundColor: 'rgba(61, 217, 214, 0.1)',
-    borderRadius: 8,
-    padding: 12,
-    color: '#ffffff',
-    fontSize: 16,
-    minHeight: 60,
-    textAlignVertical: 'top',
-  },
-  editActions: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: 8,
-    marginTop: 8,
-  },
-  editButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(61, 217, 214, 0.1)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  cancelButton: {
-    backgroundColor: 'rgba(255, 107, 74, 0.1)',
-  },
-  votersList: {
-    marginTop: 16,
-    gap: 8,
-  },
-  voterName: {
-    color: '#ffffff',
-    fontSize: 16,
-    marginLeft: 16,
-  },
-  noVoters: {
-    color: 'rgba(255, 255, 255, 0.6)',
-    fontStyle: 'italic',
-    textAlign: 'center',
-    marginTop: 16,
-  },
-  voterCard: {
-    backgroundColor: 'rgba(61, 217, 214, 0.1)',
-    borderRadius: 8,
-    padding: 12,
-  },
 });
-
