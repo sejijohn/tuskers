@@ -38,6 +38,7 @@ export default function CompletedPollsScreen() {
       collection(db, 'polls'),
       where('isActive', '==', false),
       where('isComplete', '==', true),
+      where('deleted', '!=', true)
     );
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const pollsList: Poll[] = [];
