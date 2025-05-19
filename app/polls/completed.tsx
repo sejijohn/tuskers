@@ -71,8 +71,6 @@ export default function CompletedPollsScreen() {
           onPress: async () => {
             try {
               await updateDoc(doc(db, 'polls', pollId), {
-                isActive: false,
-                isComplete: false,
                 deleted: true
               });
             } catch (error) {
