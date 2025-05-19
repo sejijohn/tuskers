@@ -331,6 +331,100 @@ export default function MemberDashboard() {
     }
   };
 
+  const handleEmergencySOS = async () => {
+    if (!user) return;
+
+    try {
+      Alert.alert(
+        '🚨 Emergency SOS',
+        'This will alert all members. Are you sure you need emergency assistance?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Continue',
+            style: 'destructive',
+            onPress: () => {
+              Alert.alert(
+                '⚠️ Confirm Emergency',
+                'This will create an emergency chat and notify ALL members. Please confirm this is a real emergency.',
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  {
+                    text: 'SEND SOS',
+                    style: 'destructive',
+                    onPress: async () => {
+                      try {
+                        const membersQuery = query(
+                          collection(db, 'users'),
+                          where('approved', '==', true),
+                          where('deleted', '==', false)
+                        );
+                        const membersSnapshot = await getDocs(membersQuery);
+                        const memberIds = membersSnapshot.docs.map(doc => doc.id);
+
+                        const chatData = {
+                          type: 'group',
+                          name: '🚨 EMERGENCY SOS',
+                          participants: memberIds,
+                          createdAt: new Date().toISOString(),
+                          updatedAt: new Date().toISOString(),
+                        };
+
+                        const chatRef = await addDoc(collection(db, 'chats'), chatData);
+
+                        let locationStr = '';
+                        try {
+                          const { status } = await Location.requestForegroundPermissionsAsync();
+                          if (status === 'granted') {
+                            const location = await Location.getCurrentPositionAsync({});
+                            locationStr = `\n\nLocation: https://maps.google.com/?q=${location.coords.latitude},${location.coords.longitude}`;
+                          }
+                        } catch (error) {
+                          console.log('Error getting location:', error);
+                        }
+
+                        const messageData = {
+                          content: `🚨 EMERGENCY SOS: PLEASE CALL ${user.phoneNumber || 'MEMBER'}\n\nEmergency assistance needed by ${user.fullName}.${locationStr}`,
+                          senderId: user.id,
+                          senderName: user.fullName,
+                          senderPhotoURL: user.photoURL,
+                          timestamp: new Date().toISOString(),
+                          type: 'text',
+                          statusMap: {
+                            [user.id]: 'sent'
+                          }
+                        };
+
+                        await addDoc(collection(db, 'chats', chatRef.id, 'messages'), messageData);
+
+                        await updateDoc(doc(db, 'chats', chatRef.id), {
+                          lastMessage: messageData,
+                          updatedAt: new Date().toISOString(),
+                        });
+
+                        router.push({
+                          pathname: "/chat/[id]",
+                          params: { id: chatRef.id }
+                        });
+                      } catch (error) {
+                        console.error('Error sending SOS:', error);
+                        Alert.alert('Error', 'Failed to send SOS. Please try again.');
+                      }
+                    }
+                  }
+                ]
+              );
+            }
+          }
+        ]
+      );
+    } catch (error) {
+      console.error('Error in handleEmergencySOS:', error);
+      Alert.alert('Error', 'Failed to process SOS request. Please try again.');
+    }
+  };
+
+
   const renderWeatherIcon = (code: number) => {
     const condition = getWeatherCondition(code).toLowerCase();
 

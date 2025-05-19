@@ -8,8 +8,10 @@ import { useUser } from '../../context/UserContext';
 import { Message, Chat } from '../../types/chat';
 import { User } from '../../types/user';
 import ParsedText from 'react-native-parsed-text';
+import { useRouter } from 'expo-router';
 
 export default function ChatRoom() {
+  const router = useRouter();
   const { id } = useLocalSearchParams();
   const { user } = useUser();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -32,53 +34,65 @@ export default function ChatRoom() {
 
     // Fetch chat details
     const fetchChat = async () => {
-      const chatDoc = await getDoc(doc(db, 'chats', id as string));
-      if (chatDoc.exists()) {
-        const chatData = { id: chatDoc.id, ...chatDoc.data() } as Chat;
-        setChat(chatData);
+      try {
+        const chatDoc = await getDoc(doc(db, 'chats', id as string));
+        if (!chatDoc.exists()) {
+          Alert.alert(
+            'Chat Not Found',
+            'This chat may have been deleted.',
+            [
+              {
+                text: 'OK',
+                onPress: () => router.replace('/chat'), // go back to chat list
+              },
+            ]
+          );
+          return;
+        } else {
+          const chatData = { id: chatDoc.id, ...chatDoc.data() } as Chat;
+          setChat(chatData);
+          if (chatData.type === 'group') {
+            // Clear any previous listeners
+            Object.values(memberUnsubscribes.current).forEach((unsub) => unsub());
+            memberUnsubscribes.current = {};
 
-        // Fetch members if it's a group chat
-        // if (chatData.type === 'group') {
+            const newMembers: Record<string, User> = {};
 
+            chatData.participants.forEach((participantId) => {
+              const userRef = doc(db, 'users', participantId);
+              const unsubscribe = onSnapshot(userRef, (docSnap) => {
+                if (docSnap.exists()) {
+                  const updatedUser = { id: docSnap.id, ...docSnap.data() } as User;
+                  newMembers[docSnap.id] = updatedUser;
+                  setMembers((prevMembers) => {
+                    const membersMap = Object.fromEntries(prevMembers.map((m) => [m.id, m]));
+                    membersMap[updatedUser.id] = updatedUser;
+                    return Object.values(membersMap);
+                  });
+                }
+              });
 
-        //   const memberPromises = chatData.participants.map(async (participantId) => {
-        //     const userDoc = await getDoc(doc(db, 'users', participantId));
-        //     if (userDoc.exists()) {
-        //       return { id: userDoc.id, ...userDoc.data() } as User;
-        //     }
-        //     return null;
-        //   });
-
-        //   const memberData = await Promise.all(memberPromises);
-        //   setMembers(memberData.filter((m): m is User => m !== null));
-        // }
-
-        if (chatData.type === 'group') {
-          // Clear any previous listeners
-          Object.values(memberUnsubscribes.current).forEach((unsub) => unsub());
-          memberUnsubscribes.current = {};
-
-          const newMembers: Record<string, User> = {};
-
-          chatData.participants.forEach((participantId) => {
-            const userRef = doc(db, 'users', participantId);
-            const unsubscribe = onSnapshot(userRef, (docSnap) => {
-              if (docSnap.exists()) {
-                const updatedUser = { id: docSnap.id, ...docSnap.data() } as User;
-                newMembers[docSnap.id] = updatedUser;
-                setMembers((prevMembers) => {
-                  const membersMap = Object.fromEntries(prevMembers.map((m) => [m.id, m]));
-                  membersMap[updatedUser.id] = updatedUser;
-                  return Object.values(membersMap);
-                });
-              }
+              memberUnsubscribes.current[participantId] = unsubscribe;
             });
-
-            memberUnsubscribes.current[participantId] = unsubscribe;
-          });
+          }
         }
+        setLoading(false);
+
+      } catch (error) {
+        Alert.alert(
+          'Chat Not Found',
+          'This chat may have been deleted.',
+          [
+            {
+              text: 'OK',
+              onPress: () => router.replace('/chat'), // go back to chat list
+            },
+          ]
+        );
+
+
       }
-      setLoading(false);
+
     };
 
     fetchChat();

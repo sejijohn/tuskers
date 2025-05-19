@@ -11,6 +11,7 @@ import { Poll } from '../../types/poll';
 import { Button } from '../../components/Button';
 import { useFocusEffect } from '@react-navigation/native';
 import ParsedText from 'react-native-parsed-text';
+import { FirebaseError } from 'firebase/app';
 
 
 export default function ChatList() {
@@ -111,15 +112,31 @@ export default function ChatList() {
     return otherUser?.fullName || 'Unknown User';
   };
 
-  const handleDeleteChat = async (chatId: string) => {
-    if (!user) return;
 
+  const handleDeleteChat = async (chatId: string) => {
     try {
       setDeleting(chatId);
       await deleteDoc(doc(db, 'chats', chatId));
     } catch (error) {
       console.error('Error deleting chat:', error);
-      Alert.alert('Error', 'Failed to delete chat. Please try again.');
+      if (error instanceof FirebaseError) {
+        switch (error.code) {
+          case 'permission-denied':
+            Alert.alert('Permission Denied', 'You do not have permission to delete this chat.');
+            break;
+          case 'unauthenticated':
+            Alert.alert('Not Signed In', 'Please sign in to delete this chat.');
+            break;
+          case 'not-found':
+            Alert.alert('Chat Not Found', 'This chat no longer exists.');
+            break;
+          default:
+            Alert.alert('Error', 'Failed to delete chat. Please try again later.');
+            break;
+        }
+      } else {
+        Alert.alert('Error', 'Something went wrong. Please try again.');
+      }
     } finally {
       setDeleting(null);
     }
