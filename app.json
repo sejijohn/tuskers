@@ -19,6 +19,21 @@
         "NSPhotoLibraryUsageDescription": "This app needs access to your photo library to upload images."
       }
     },
+    "android": {
+      "package": "com.tuskers.app",
+      "versionCode": 1,
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE"
+      ],
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/Tuskers.png",
+        "backgroundColor": "#ffffff"
+      },
+      "googleServicesFile": "./google-services.json"
+    },
     "web": {
       "bundler": "metro",
       "output": "single",

@@ -1,14 +1,13 @@
 import { Stack } from 'expo-router';
 import { useEffect, useState, useCallback } from 'react';
-import { doc, getDoc} from 'firebase/firestore';
-import { usePathname } from 'expo-router';
+import { doc, getDoc } from 'firebase/firestore';
+import { usePathname, useRouter } from 'expo-router';
 import { db } from '../../utils/firebase';
 import { Chat } from '../../types/chat';
 import { User } from '../../types/user';
 import { useUser } from '../../context/UserContext';
 import { TouchableOpacity } from 'react-native';
 import { ChevronLeft } from 'lucide-react-native';
-import { useRouter } from 'expo-router';
 
 export default function ChatLayout() {
   const router = useRouter();
@@ -23,7 +22,7 @@ export default function ChatLayout() {
       if (!chatDoc.exists()) return null;
 
       const chatData = chatDoc.data() as Chat;
-      
+
       // If it's a group chat, return the name
       if (chatData.type === 'group') {
         return chatData.name;
@@ -63,13 +62,13 @@ export default function ChatLayout() {
 
   return (
     <Stack>
-      <Stack.Screen 
-        name="index" 
-        options={{ 
-          headerShown: false 
-        }} 
+      <Stack.Screen
+        name="index"
+        options={{
+          headerShown: false
+        }}
       />
-      <Stack.Screen 
+      {/* <Stack.Screen 
         name="[id]" 
         options={({ route }) => ({ 
           headerShown: true,
@@ -91,9 +90,43 @@ export default function ChatLayout() {
           ),
           title: chatTitles[route.params?.id as string] || 'Chat',
         })} 
+      /> */}
+      <Stack.Screen
+        name="[id]"
+        options={({ route }) => {
+          const chatId = route.params?.id as string;
+          const chatName = chatTitles[chatId];
+          const isEmergency = chatName?.includes('EMERGENCY');
+
+          return {
+            headerShown: true,
+            headerStyle: {
+              backgroundColor: '#243c44',
+            },
+            headerTintColor: '#3dd9d6',
+            headerTitleStyle: {
+              color: '#3dd9d6',
+            },
+            headerLeft: () => (
+              <TouchableOpacity
+                onPress={() => {
+                  if (isEmergency) {
+                    router.push('/chat');
+                  } else {
+                    router.back();
+                  }
+                }}
+                style={{ marginLeft: 8 }}
+              >
+                <ChevronLeft size={24} color="#3dd9d6" />
+              </TouchableOpacity>
+            ),
+            title: chatName || 'Chat',
+          };
+        }}
       />
-      <Stack.Screen 
-        name="new" 
+      <Stack.Screen
+        name="new"
         options={{
           presentation: 'modal',
           headerStyle: {
