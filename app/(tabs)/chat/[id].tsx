@@ -441,6 +441,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     marginBottom: 16,
     maxWidth: '80%',
+    width: '100%',
   },
   ownMessage: {
     alignSelf: 'flex-end',
@@ -457,6 +458,7 @@ const styles = StyleSheet.create({
   messageContent: {
     borderRadius: 16,
     padding: 12,
+    flex: 1,
   },
   ownMessageContent: {
     backgroundColor: '#3dd9d6',
@@ -472,6 +474,7 @@ const styles = StyleSheet.create({
   messageText: {
     fontSize: 16,
     marginBottom: 4,
+    flexWrap: 'wrap',
   },
   ownMessageText: {
     color: '#1a2f35',
