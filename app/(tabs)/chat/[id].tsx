@@ -16,7 +16,7 @@ export default function ChatRoom() {
   const router = useRouter();
   const { id } = useLocalSearchParams();
   const { user } = useUser();
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<(Message & { uniqueKey?: string })[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [chat, setChat] = useState<Chat | null>(null);
   const [loading, setLoading] = useState(true);
@@ -55,13 +55,14 @@ export default function ChatRoom() {
       }
 
       const snapshot = await getDocs(q);
-      const messageList: Message[] = [];
+      const messageList: (Message & { uniqueKey: string })[] = [];
       
       snapshot.forEach((doc) => {
         messageList.push({
           id: doc.id,
-          ...doc.data()
-        } as Message);
+          ...doc.data(),
+          uniqueKey: `${doc.id}-${Date.now()}`
+        } as Message & { uniqueKey: string });
       });
 
       setHasMoreMessages(snapshot.docs.length === MESSAGES_PER_PAGE);
@@ -86,7 +87,6 @@ export default function ChatRoom() {
   useEffect(() => {
     if (!id) return;
 
-    // Fetch chat details
     const fetchChat = async () => {
       try {
         const chatDoc = await getDoc(doc(db, 'chats', id as string));
@@ -131,7 +131,6 @@ export default function ChatRoom() {
           });
         }
 
-        // Load initial messages
         await loadMessages(true);
         setLoading(false);
       } catch (error) {
@@ -151,7 +150,6 @@ export default function ChatRoom() {
 
     fetchChat();
 
-    // Listen for new messages
     const messagesRef = collection(db, 'chats', id as string, 'messages');
     const recentMessagesQuery = query(
       messagesRef,
@@ -162,10 +160,15 @@ export default function ChatRoom() {
     const unsubscribe = onSnapshot(recentMessagesQuery, (snapshot) => {
       snapshot.docChanges().forEach((change) => {
         if (change.type === 'added') {
-          const newMessage = { id: change.doc.id, ...change.doc.data() } as Message;
+          const newMessage = { 
+            id: change.doc.id, 
+            ...change.doc.data(),
+            uniqueKey: `${change.doc.id}-${Date.now()}`
+          } as Message & { uniqueKey: string };
+          
           setMessages(prev => {
-            // Check if message already exists
-            if (!prev.find(m => m.id === newMessage.id)) {
+            const messageExists = prev.some(m => m.id === newMessage.id);
+            if (!messageExists) {
               return [newMessage, ...prev];
             }
             return prev;
@@ -365,7 +368,7 @@ export default function ChatRoom() {
           ref={flatListRef}
           data={messages}
           renderItem={renderMessage}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item: Message & { uniqueKey?: string }) => item.uniqueKey || item.id}
           contentContainerStyle={styles.messagesList}
           inverted={true}
           onEndReached={handleLoadMore}
