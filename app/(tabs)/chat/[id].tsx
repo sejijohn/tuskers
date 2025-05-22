@@ -37,6 +37,7 @@ export default function ChatRoom() {
   const loadMessages = useCallback(async (isInitial = false) => {
     try {
       if (!id || (!isInitial && !hasMoreMessages)) return;
+      setLoadingMore(true);
 
       const messagesRef = collection(db, 'chats', id as string, 'messages');
       let q = query(
@@ -55,15 +56,18 @@ export default function ChatRoom() {
       }
 
       const snapshot = await getDocs(q);
-      const messageList: (Message & { uniqueKey: string })[] = [];
       
-      snapshot.forEach((doc) => {
-        messageList.push({
-          id: doc.id,
-          ...doc.data(),
-          uniqueKey: `${doc.id}-${Date.now()}`
-        } as Message & { uniqueKey: string });
-      });
+      if (snapshot.empty) {
+        setHasMoreMessages(false);
+        setLoadingMore(false);
+        return;
+      }
+
+      const messageList = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        uniqueKey: `${doc.id}-${doc.data().timestamp}`
+      })) as (Message & { uniqueKey: string })[];
 
       setHasMoreMessages(snapshot.docs.length === MESSAGES_PER_PAGE);
       
@@ -71,11 +75,16 @@ export default function ChatRoom() {
         lastMessageRef.current = snapshot.docs[snapshot.docs.length - 1];
       }
 
-      if (isInitial) {
-        setMessages(messageList);
-      } else {
-        setMessages(prev => [...prev, ...messageList]);
-      }
+      setMessages(prev => {
+        if (isInitial) {
+          return messageList;
+        }
+        // Remove any duplicates when adding more messages
+        const newMessages = messageList.filter(
+          newMsg => !prev.some(existingMsg => existingMsg.id === newMsg.id)
+        );
+        return [...prev, ...newMessages];
+      });
     } catch (error) {
       console.error('Error loading messages:', error);
     } finally {
@@ -368,16 +377,22 @@ export default function ChatRoom() {
           ref={flatListRef}
           data={messages}
           renderItem={renderMessage}
-          keyExtractor={(item: Message & { uniqueKey?: string }) => item.uniqueKey || item.id}
+          keyExtractor={(item) => item.uniqueKey}
           contentContainerStyle={styles.messagesList}
-          inverted={true}
+          inverted
           onEndReached={handleLoadMore}
           onEndReachedThreshold={0.5}
           ListFooterComponent={loadingMore ? (
-            <Text style={styles.loadingText}>Loading more messages...</Text>
+            <View style={styles.loadingMoreContainer}>
+              <Text style={styles.loadingText}>Loading more messages...</Text>
+            </View>
           ) : null}
           onViewableItemsChanged={onViewableItemsChanged}
           viewabilityConfig={viewabilityConfig}
+          maintainVisibleContentPosition={{
+            minIndexForVisible: 0,
+            autoscrollToTopThreshold: 10
+          }}
         />
       )}
 
@@ -607,4 +622,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  loadingMoreContainer: {
+    padding: 10,
+    alignItems: 'center'
+  }
 });
