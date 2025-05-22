@@ -66,7 +66,7 @@ export default function ChatRoom() {
       const messageList = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data(),
-        uniqueKey: `${doc.id}-${doc.data().timestamp}`
+        uniqueKey: `${doc.id}-${Date.now()}`
       })) as (Message & { uniqueKey: string })[];
 
       setHasMoreMessages(snapshot.docs.length === MESSAGES_PER_PAGE);
@@ -79,7 +79,6 @@ export default function ChatRoom() {
         if (isInitial) {
           return messageList;
         }
-        // Remove any duplicates when adding more messages
         const newMessages = messageList.filter(
           newMsg => !prev.some(existingMsg => existingMsg.id === newMsg.id)
         );
