@@ -16,81 +16,17 @@ export default function ChatRoom() {
   const router = useRouter();
   const { id } = useLocalSearchParams();
   const { user } = useUser();
-  const [messages, setMessages] = useState<(Message & { uniqueKey?: string })[]>([]);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [chat, setChat] = useState<Chat | null>(null);
   const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
   const [showMembers, setShowMembers] = useState(false);
   const [members, setMembers] = useState<User[]>([]);
-  const [hasMoreMessages, setHasMoreMessages] = useState(true);
   const flatListRef = useRef<FlatList>(null);
-  const readMessagesRef = useRef<Set<string>>(new Set());
-  const lastMessageRef = useRef<any>(null);
-  const statusPriority: Record<string, number> = {
-    sent: 1,
-    delivered: 2,
-    read: 3,
-  };
-  const memberUnsubscribes = useRef<Record<string, () => void>>({});
-
-  const loadMessages = useCallback(async (isInitial = false) => {
-    try {
-      if (!id || (!isInitial && !hasMoreMessages)) return;
-      setLoadingMore(true);
-
-      const messagesRef = collection(db, 'chats', id as string, 'messages');
-      let q = query(
-        messagesRef,
-        orderBy('timestamp', 'desc'),
-        limit(MESSAGES_PER_PAGE)
-      );
-
-      if (!isInitial && lastMessageRef.current) {
-        q = query(
-          messagesRef,
-          orderBy('timestamp', 'desc'),
-          startAfter(lastMessageRef.current),
-          limit(MESSAGES_PER_PAGE)
-        );
-      }
-
-      const snapshot = await getDocs(q);
-      
-      if (snapshot.empty) {
-        setHasMoreMessages(false);
-        setLoadingMore(false);
-        return;
-      }
-
-      const messageList = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        uniqueKey: `${doc.id}-${Date.now()}`
-      })) as (Message & { uniqueKey: string })[];
-
-      setHasMoreMessages(snapshot.docs.length === MESSAGES_PER_PAGE);
-      
-      if (snapshot.docs.length > 0) {
-        lastMessageRef.current = snapshot.docs[snapshot.docs.length - 1];
-      }
-
-      setMessages(prev => {
-        if (isInitial) {
-          return messageList;
-        }
-        const newMessages = messageList.filter(
-          newMsg => !prev.some(existingMsg => existingMsg.id === newMsg.id)
-        );
-        return [...prev, ...newMessages];
-      });
-    } catch (error) {
-      console.error('Error loading messages:', error);
-    } finally {
-      setLoading(false);
-      setLoadingMore(false);
-    }
-  }, [id, hasMoreMessages]);
+  const [lastMessageDoc, setLastMessageDoc] = useState<any>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMoreMessages, setHasMoreMessages] = useState(true);
+  const [isFirstLoad, setIsFirstLoad] = useState(true);
 
   useEffect(() => {
     if (!id) return;
@@ -102,143 +38,110 @@ export default function ChatRoom() {
           Alert.alert(
             'Chat Not Found',
             'This chat may have been deleted.',
-            [
-              {
-                text: 'OK',
-                onPress: () => router.replace('/chat'),
-              },
-            ]
+            [{ text: 'OK', onPress: () => router.replace('/chat') }]
           );
           return;
         }
-        
+
         const chatData = { id: chatDoc.id, ...chatDoc.data() } as Chat;
         setChat(chatData);
-        
+
         if (chatData.type === 'group') {
-          Object.values(memberUnsubscribes.current).forEach((unsub) => unsub());
-          memberUnsubscribes.current = {};
-
-          const newMembers: Record<string, User> = {};
-
-          chatData.participants.forEach((participantId) => {
-            const userRef = doc(db, 'users', participantId);
-            const unsubscribe = onSnapshot(userRef, (docSnap) => {
-              if (docSnap.exists()) {
-                const updatedUser = { id: docSnap.id, ...docSnap.data() } as User;
-                newMembers[docSnap.id] = updatedUser;
-                setMembers((prevMembers) => {
-                  const membersMap = Object.fromEntries(prevMembers.map((m) => [m.id, m]));
-                  membersMap[updatedUser.id] = updatedUser;
-                  return Object.values(membersMap);
-                });
-              }
-            });
-
-            memberUnsubscribes.current[participantId] = unsubscribe;
-          });
+          const membersData = await Promise.all(
+            chatData.participants.map(async (participantId) => {
+              const userDoc = await getDoc(doc(db, 'users', participantId));
+              return { id: userDoc.id, ...userDoc.data() } as User;
+            })
+          );
+          setMembers(membersData);
         }
 
-        await loadMessages(true);
+        // Initial messages query
+        const messagesQuery = query(
+          collection(db, 'chats', id as string, 'messages'),
+          orderBy('timestamp', 'desc'),
+          limit(MESSAGES_PER_PAGE)
+        );
+
+        const messagesSnapshot = await getDocs(messagesQuery);
+        const messagesList: Message[] = [];
+        messagesSnapshot.forEach((doc) => {
+          messagesList.push({ id: doc.id, ...doc.data() } as Message);
+        });
+
+        setMessages(messagesList);
+        setLastMessageDoc(messagesSnapshot.docs[messagesSnapshot.docs.length - 1]);
+        setHasMoreMessages(messagesSnapshot.docs.length === MESSAGES_PER_PAGE);
         setLoading(false);
+        setIsFirstLoad(false);
+
+        // Set up real-time listener for new messages
+        const unsubscribe = onSnapshot(
+          query(
+            collection(db, 'chats', id as string, 'messages'),
+            orderBy('timestamp', 'desc'),
+            limit(1)
+          ),
+          (snapshot) => {
+            snapshot.docChanges().forEach((change) => {
+              if (change.type === 'added') {
+                const newMessage = { id: change.doc.id, ...change.doc.data() } as Message;
+                setMessages(prev => [newMessage, ...prev]);
+              }
+            });
+          }
+        );
+
+        return () => unsubscribe();
       } catch (error) {
         console.error('Error fetching chat:', error);
-        Alert.alert(
-          'Error',
-          'Failed to load chat. Please try again.',
-          [
-            {
-              text: 'OK',
-              onPress: () => router.replace('/chat'),
-            },
-          ]
-        );
+        setLoading(false);
       }
     };
 
     fetchChat();
+  }, [id]);
 
-    const messagesRef = collection(db, 'chats', id as string, 'messages');
-    const recentMessagesQuery = query(
-      messagesRef,
-      orderBy('timestamp', 'desc'),
-      limit(1)
-    );
+  const loadMoreMessages = async () => {
+    if (!hasMoreMessages || loadingMore || !lastMessageDoc) return;
 
-    const unsubscribe = onSnapshot(recentMessagesQuery, (snapshot) => {
-      snapshot.docChanges().forEach((change) => {
-        if (change.type === 'added') {
-          const newMessage = { 
-            id: change.doc.id, 
-            ...change.doc.data(),
-            uniqueKey: `${change.doc.id}-${Date.now()}`
-          } as Message & { uniqueKey: string };
-          
-          setMessages(prev => {
-            const messageExists = prev.some(m => m.id === newMessage.id);
-            if (!messageExists) {
-              return [newMessage, ...prev];
-            }
-            return prev;
-          });
-        }
+    try {
+      setLoadingMore(true);
+      const moreMessagesQuery = query(
+        collection(db, 'chats', id as string, 'messages'),
+        orderBy('timestamp', 'desc'),
+        startAfter(lastMessageDoc),
+        limit(MESSAGES_PER_PAGE)
+      );
+
+      const moreMessagesSnapshot = await getDocs(moreMessagesQuery);
+      const moreMessagesList: Message[] = [];
+      moreMessagesSnapshot.forEach((doc) => {
+        moreMessagesList.push({ id: doc.id, ...doc.data() } as Message);
       });
-    });
 
-    return () => {
-      unsubscribe();
-      Object.values(memberUnsubscribes.current).forEach((unsub) => unsub());
-    };
-  }, [id, loadMessages]);
-
-  const handleLoadMore = async () => {
-    if (loadingMore || !hasMoreMessages) return;
-    
-    if (messages.length >= 100) {
-      setHasMoreMessages(false);
-      return;
+      if (moreMessagesList.length > 0) {
+        setMessages(prev => [...prev, ...moreMessagesList]);
+        setLastMessageDoc(moreMessagesSnapshot.docs[moreMessagesSnapshot.docs.length - 1]);
+        setHasMoreMessages(moreMessagesList.length === MESSAGES_PER_PAGE);
+      } else {
+        setHasMoreMessages(false);
+      }
+    } catch (error) {
+      console.error('Error loading more messages:', error);
+    } finally {
+      setLoadingMore(false);
     }
-    
-    setLoadingMore(true);
-    await loadMessages(false);
   };
-
-  const onViewableItemsChanged = useCallback(
-    ({ viewableItems }: { viewableItems: Array<ViewToken> }) => {
-      if (!user?.id) return;
-
-      viewableItems.forEach(({ item }) => {
-        const msg = item as Message;
-
-        const alreadyMarked = readMessagesRef.current.has(msg.id);
-        const shouldMarkAsRead =
-          msg.senderId !== user.id &&
-          msg.statusMap?.[user.id] !== 'read' &&
-          !alreadyMarked;
-
-        if (shouldMarkAsRead) {
-          const messageRef = doc(db, 'chats', id as string, 'messages', msg.id);
-          updateDoc(messageRef, {
-            [`statusMap.${user.id}`]: 'read',
-          })
-            .then(() => {
-              readMessagesRef.current.add(msg.id);
-            })
-            .catch((err) => console.error('Failed to update message to read:', err));
-        }
-      });
-    },
-    [user?.id, id]
-  );
 
   const sendMessage = async () => {
     if (!newMessage.trim() || !user || !chat) return;
 
     const messageData: Omit<Message, 'id'> = {
       content: newMessage.trim(),
-      senderId: user?.id,
-      senderName: user?.fullName,
-      senderPhotoURL: user?.photoURL,
+      senderId: user.id,
+      senderName: user.fullName,
+      senderPhotoURL: user.photoURL,
       timestamp: new Date().toISOString(),
       type: 'text',
       statusMap: {
@@ -261,21 +164,12 @@ export default function ChatRoom() {
 
   const renderMessage = ({ item }: { item: Message }) => {
     const isOwnMessage = item.senderId === user?.id;
-    let userStatus: string | undefined = undefined;
-
-    if (isOwnMessage && item.statusMap) {
-      const otherStatuses = Object.entries(item.statusMap)
+    let userStatus = isOwnMessage && item.statusMap ? 
+      Object.entries(item.statusMap)
         .filter(([uid]) => uid !== user?.id)
-        .map(([, status]) => status);
-
-      const highestStatus = otherStatuses.reduce((highest, current) => {
-        return statusPriority[current] > statusPriority[highest] ? current : highest;
-      }, 'sent');
-
-      userStatus = highestStatus;
-    } else {
-      userStatus = item.statusMap?.[user?.id ?? ''];
-    }
+        .reduce((highest, [, status]) => 
+          statusPriority[status] > statusPriority[highest] ? status : highest
+        , 'sent') : item.statusMap?.[user?.id ?? ''];
 
     return (
       <View style={[
@@ -295,48 +189,40 @@ export default function ChatRoom() {
           {!isOwnMessage && (
             <Text style={styles.senderName}>{item.senderName}</Text>
           )}
-          <View style={styles.messageTextContainer}>
-            <ParsedText
-              style={[
-                styles.messageText,
-                isOwnMessage ? styles.ownMessageText : styles.otherMessageText
-              ]}
-              parse={[
-                {
-                  type: 'url',
-                  style: {
-                    color: isOwnMessage ? '#269999' : '#3dd9d6',
-                    textDecorationLine: 'underline'
-                  },
-                  onPress: async (url) => {
-                    const supported = await Linking.canOpenURL(url);
-                    if (supported) {
-                      Linking.openURL(url);
-                    } else {
-                      Alert.alert("Can't open this URL:", url);
-                    }
+          <ParsedText
+            style={[
+              styles.messageText,
+              isOwnMessage ? styles.ownMessageText : styles.otherMessageText
+            ]}
+            parse={[
+              {
+                type: 'url',
+                style: {
+                  color: isOwnMessage ? '#269999' : '#3dd9d6',
+                  textDecorationLine: 'underline'
+                },
+                onPress: async (url) => {
+                  const supported = await Linking.canOpenURL(url);
+                  if (supported) {
+                    Linking.openURL(url);
+                  } else {
+                    Alert.alert("Can't open this URL:", url);
                   }
                 }
-              ]}
-              childrenProps={{ allowFontScaling: false }}
-            >
-              {item.content}
-            </ParsedText>
-          </View>
-          <View style={styles.messageFooter}>
-            <Text style={styles.timestamp}>
-              {new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              }
+            ]}
+            childrenProps={{ allowFontScaling: false }}
+          >
+            {item.content}
+          </ParsedText>
+          <Text style={styles.timestamp}>
+            {new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          </Text>
+          {isOwnMessage && userStatus && (
+            <Text style={styles.messageStatus}>
+              {userStatus === 'read' ? 'Read' : userStatus === 'delivered' ? 'Delivered' : 'Sent'}
             </Text>
-            {isOwnMessage && (
-              <Text style={styles.messageStatus}>
-                {userStatus === 'read'
-                  ? 'Read'
-                  : userStatus === 'delivered'
-                    ? 'Delivered'
-                    : 'Sent'}
-              </Text>
-            )}
-          </View>
+          )}
         </View>
       </View>
     );
@@ -355,8 +241,18 @@ export default function ChatRoom() {
     </View>
   );
 
-  const viewabilityConfig = {
-    itemVisiblePercentThreshold: 80,
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.loadingText}>Loading chat...</Text>
+      </View>
+    );
+  }
+
+  const statusPriority: Record<string, number> = {
+    sent: 1,
+    delivered: 2,
+    read: 3,
   };
 
   return (
@@ -377,36 +273,21 @@ export default function ChatRoom() {
         </TouchableOpacity>
       )}
 
-      {loading ? (
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Loading messages...</Text>
-        </View>
-      ) : (
-        <FlatList
-          ref={flatListRef}
-          data={messages}
-          renderItem={renderMessage}
-          keyExtractor={(item) => item.uniqueKey}
-          contentContainerStyle={styles.messagesList}
-          inverted
-          onEndReached={hasMoreMessages ? handleLoadMore : null}
-          onEndReachedThreshold={0.5}
-          ListFooterComponent={
-            loadingMore ? (
-              <View style={styles.loadingMoreContainer}>
-                <Text style={styles.loadingText}>Loading more messages...</Text>
-              </View>
-            ):null
-          }
-          onViewableItemsChanged={onViewableItemsChanged}
-          viewabilityConfig={viewabilityConfig}
-          maintainVisibleContentPosition={{
-            minIndexForVisible: 0,
-            autoscrollToTopThreshold: 10
-          }}
-          scrollEnabled={hasMoreMessages || messages.length === 0}
-        />
-      )}
+      <FlatList
+        ref={flatListRef}
+        data={messages}
+        renderItem={renderMessage}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={styles.messagesList}
+        inverted
+        onEndReached={loadMoreMessages}
+        onEndReachedThreshold={0.5}
+        ListFooterComponent={loadingMore ? (
+          <View style={styles.loadingMoreContainer}>
+            <Text style={styles.loadingText}>Loading more messages...</Text>
+          </View>
+        ) : null}
+      />
 
       <View style={styles.inputContainer}>
         <TextInput
@@ -470,12 +351,10 @@ const styles = StyleSheet.create({
   messageContainer: {
     flexDirection: 'row',
     marginBottom: 16,
-    maxWidth: '85%',
-    alignSelf: 'flex-start',
+    maxWidth: '80%',
   },
   ownMessage: {
     alignSelf: 'flex-end',
-    flexDirection: 'row-reverse',
   },
   otherMessage: {
     alignSelf: 'flex-start',
@@ -484,13 +363,11 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    marginHorizontal: 8,
+    marginRight: 8,
   },
   messageContent: {
     borderRadius: 16,
     padding: 12,
-    minWidth: 80,
-    maxWidth: '100%',
   },
   ownMessageContent: {
     backgroundColor: '#3dd9d6',
@@ -498,14 +375,14 @@ const styles = StyleSheet.create({
   otherMessageContent: {
     backgroundColor: '#243c44',
   },
-  messageTextContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+  senderName: {
+    fontSize: 12,
+    color: '#3dd9d6',
+    marginBottom: 4,
   },
   messageText: {
     fontSize: 16,
-    lineHeight: 22,
-    flexShrink: 1,
+    marginBottom: 4,
   },
   ownMessageText: {
     color: '#1a2f35',
@@ -513,26 +390,10 @@ const styles = StyleSheet.create({
   otherMessageText: {
     color: '#ffffff',
   },
-  messageFooter: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    alignItems: 'center',
-    marginTop: 4,
-    gap: 4,
-  },
   timestamp: {
     fontSize: 10,
     color: 'rgba(255, 255, 255, 0.5)',
-  },
-  messageStatus: {
-    fontSize: 10,
-    color: '#1a2f35',
-    opacity: 0.7,
-  },
-  senderName: {
-    fontSize: 12,
-    color: '#3dd9d6',
-    marginBottom: 4,
+    alignSelf: 'flex-end',
   },
   inputContainer: {
     flexDirection: 'row',
@@ -641,26 +502,13 @@ const styles = StyleSheet.create({
     color: 'rgba(255, 255, 255, 0.7)',
     textTransform: 'capitalize',
   },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+  messageStatus: {
+    fontSize: 8,
+    color: 'rgba(26, 47, 53, 0.7)',
+    marginTop: 5,
   },
   loadingMoreContainer: {
-    padding: 10,
-    alignItems: 'center'
-  },
-  endOfMessagesContainer: {
     padding: 16,
     alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(61, 217, 214, 0.1)',
-    borderRadius: 8,
-    marginBottom: 16,
   },
-  endOfMessagesText: {
-    color: '#3dd9d6',
-    fontSize: 14,
-    fontWeight: '500',
-  }
 });
