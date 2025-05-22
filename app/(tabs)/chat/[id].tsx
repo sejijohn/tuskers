@@ -396,7 +396,7 @@ export default function ChatRoom() {
               <View style={styles.loadingMoreContainer}>
                 <Text style={styles.loadingText}>Loading more messages...</Text>
               </View>
-            ) :  null
+            ):null
           }
           onViewableItemsChanged={onViewableItemsChanged}
           viewabilityConfig={viewabilityConfig}
