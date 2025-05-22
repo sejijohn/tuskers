@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { StyleSheet, View, Text, TextInput, TouchableOpacity, FlatList, KeyboardAvoidingView, Platform, Image, Modal, ViewToken, Linking, Alert } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
-import { collection, query, orderBy, onSnapshot, addDoc, doc, getDoc, updateDoc } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, addDoc, doc, getDoc, updateDoc, limit, startAfter, getDocs } from 'firebase/firestore';
 import { Send, Users, X } from 'lucide-react-native';
 import { db } from '../../utils/firebase';
 import { useUser } from '../../context/UserContext';
@@ -9,6 +9,8 @@ import { Message, Chat } from '../../types/chat';
 import { User } from '../../types/user';
 import ParsedText from 'react-native-parsed-text';
 import { useRouter } from 'expo-router';
+
+const MESSAGES_PER_PAGE = 20;
 
 export default function ChatRoom() {
   const router = useRouter();
@@ -18,16 +20,68 @@ export default function ChatRoom() {
   const [newMessage, setNewMessage] = useState('');
   const [chat, setChat] = useState<Chat | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [showMembers, setShowMembers] = useState(false);
   const [members, setMembers] = useState<User[]>([]);
+  const [hasMoreMessages, setHasMoreMessages] = useState(true);
   const flatListRef = useRef<FlatList>(null);
   const readMessagesRef = useRef<Set<string>>(new Set());
+  const lastMessageRef = useRef<any>(null);
   const statusPriority: Record<string, number> = {
     sent: 1,
     delivered: 2,
     read: 3,
   };
   const memberUnsubscribes = useRef<Record<string, () => void>>({});
+
+  const loadMessages = useCallback(async (isInitial = false) => {
+    try {
+      if (!id || (!isInitial && !hasMoreMessages)) return;
+
+      const messagesRef = collection(db, 'chats', id as string, 'messages');
+      let q = query(
+        messagesRef,
+        orderBy('timestamp', 'desc'),
+        limit(MESSAGES_PER_PAGE)
+      );
+
+      if (!isInitial && lastMessageRef.current) {
+        q = query(
+          messagesRef,
+          orderBy('timestamp', 'desc'),
+          startAfter(lastMessageRef.current),
+          limit(MESSAGES_PER_PAGE)
+        );
+      }
+
+      const snapshot = await getDocs(q);
+      const messageList: Message[] = [];
+      
+      snapshot.forEach((doc) => {
+        messageList.push({
+          id: doc.id,
+          ...doc.data()
+        } as Message);
+      });
+
+      setHasMoreMessages(snapshot.docs.length === MESSAGES_PER_PAGE);
+      
+      if (snapshot.docs.length > 0) {
+        lastMessageRef.current = snapshot.docs[snapshot.docs.length - 1];
+      }
+
+      if (isInitial) {
+        setMessages(messageList);
+      } else {
+        setMessages(prev => [...prev, ...messageList]);
+      }
+    } catch (error) {
+      console.error('Error loading messages:', error);
+    } finally {
+      setLoading(false);
+      setLoadingMore(false);
+    }
+  }, [id, hasMoreMessages]);
 
   useEffect(() => {
     if (!id) return;
@@ -43,115 +97,94 @@ export default function ChatRoom() {
             [
               {
                 text: 'OK',
-                onPress: () => router.replace('/chat'), // go back to chat list
+                onPress: () => router.replace('/chat'),
               },
             ]
           );
           return;
-        } else {
-          const chatData = { id: chatDoc.id, ...chatDoc.data() } as Chat;
-          setChat(chatData);
-          if (chatData.type === 'group') {
-            // Clear any previous listeners
-            Object.values(memberUnsubscribes.current).forEach((unsub) => unsub());
-            memberUnsubscribes.current = {};
-
-            const newMembers: Record<string, User> = {};
-
-            chatData.participants.forEach((participantId) => {
-              const userRef = doc(db, 'users', participantId);
-              const unsubscribe = onSnapshot(userRef, (docSnap) => {
-                if (docSnap.exists()) {
-                  const updatedUser = { id: docSnap.id, ...docSnap.data() } as User;
-                  newMembers[docSnap.id] = updatedUser;
-                  setMembers((prevMembers) => {
-                    const membersMap = Object.fromEntries(prevMembers.map((m) => [m.id, m]));
-                    membersMap[updatedUser.id] = updatedUser;
-                    return Object.values(membersMap);
-                  });
-                }
-              });
-
-              memberUnsubscribes.current[participantId] = unsubscribe;
-            });
-          }
         }
-        setLoading(false);
+        
+        const chatData = { id: chatDoc.id, ...chatDoc.data() } as Chat;
+        setChat(chatData);
+        
+        if (chatData.type === 'group') {
+          Object.values(memberUnsubscribes.current).forEach((unsub) => unsub());
+          memberUnsubscribes.current = {};
 
+          const newMembers: Record<string, User> = {};
+
+          chatData.participants.forEach((participantId) => {
+            const userRef = doc(db, 'users', participantId);
+            const unsubscribe = onSnapshot(userRef, (docSnap) => {
+              if (docSnap.exists()) {
+                const updatedUser = { id: docSnap.id, ...docSnap.data() } as User;
+                newMembers[docSnap.id] = updatedUser;
+                setMembers((prevMembers) => {
+                  const membersMap = Object.fromEntries(prevMembers.map((m) => [m.id, m]));
+                  membersMap[updatedUser.id] = updatedUser;
+                  return Object.values(membersMap);
+                });
+              }
+            });
+
+            memberUnsubscribes.current[participantId] = unsubscribe;
+          });
+        }
+
+        // Load initial messages
+        await loadMessages(true);
+        setLoading(false);
       } catch (error) {
+        console.error('Error fetching chat:', error);
         Alert.alert(
-          'Chat Not Found',
-          'This chat may have been deleted.',
+          'Error',
+          'Failed to load chat. Please try again.',
           [
             {
               text: 'OK',
-              onPress: () => router.replace('/chat'), // go back to chat list
+              onPress: () => router.replace('/chat'),
             },
           ]
         );
-
-
       }
-
     };
 
     fetchChat();
 
-    // Subscribe to messages
-    const q = query(
-      collection(db, 'chats', id as string, 'messages'),
-      orderBy('timestamp', 'asc')
+    // Listen for new messages
+    const messagesRef = collection(db, 'chats', id as string, 'messages');
+    const recentMessagesQuery = query(
+      messagesRef,
+      orderBy('timestamp', 'desc'),
+      limit(1)
     );
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const messageList: Message[] = [];
-      snapshot.forEach((docSnap) => {
-        const data = docSnap.data() as Omit<Message, 'id'>;
-
-
-        const existing = messages.find((m) => m.id === docSnap.id);
-        const incomingStatusMap = data.statusMap || {};
-        let mergedStatusMap = { ...incomingStatusMap };
-        if (existing && existing.statusMap) {
-          for (const [uid, oldStatus] of Object.entries(existing.statusMap)) {
-            const currentStatus = incomingStatusMap[uid] || 'sent';
-            if (statusPriority[oldStatus] > statusPriority[currentStatus]) {
-              mergedStatusMap[uid] = oldStatus;
+    const unsubscribe = onSnapshot(recentMessagesQuery, (snapshot) => {
+      snapshot.docChanges().forEach((change) => {
+        if (change.type === 'added') {
+          const newMessage = { id: change.doc.id, ...change.doc.data() } as Message;
+          setMessages(prev => {
+            // Check if message already exists
+            if (!prev.find(m => m.id === newMessage.id)) {
+              return [newMessage, ...prev];
             }
-          }
+            return prev;
+          });
         }
-
-        const msg: Message = {
-          id: docSnap.id,
-          ...data,
-          statusMap: mergedStatusMap,
-        };
-
-        messageList.push(msg);
-        if (user?.id && msg.senderId !== user.id) {
-          // If sender is not the current user and the message hasn't been delivered yet.
-          if (!msg.statusMap || msg.statusMap[user.id] !== 'delivered') {
-            const messageRef = doc(db, 'chats', id as string, 'messages', docSnap.id);
-            updateDoc(messageRef, {
-              [`statusMap.${user.id}`]: 'delivered',
-            }).catch((err) => console.error('Failed to update statusMap:', err));
-          }
-        } else if (msg.senderId === user?.id && msg.statusMap) {
-          // Handle sender's message status updates here if needed
-          if (!msg.statusMap[user.id]) {
-            const messageRef = doc(db, 'chats', id as string, 'messages', docSnap.id);
-            updateDoc(messageRef, {
-              [`statusMap.${user.id}`]: 'sent',
-            }).catch((err) => console.error('Failed to update sender status:', err));
-          }
-        }
-
       });
-      setMessages(messageList);
     });
 
-    return () => { unsubscribe(); Object.values(memberUnsubscribes.current).forEach((unsub) => unsub()); }
-  }, [id]);
+    return () => {
+      unsubscribe();
+      Object.values(memberUnsubscribes.current).forEach((unsub) => unsub());
+    };
+  }, [id, loadMessages]);
+
+  const handleLoadMore = async () => {
+    if (loadingMore || !hasMoreMessages) return;
+    setLoadingMore(true);
+    await loadMessages(false);
+  };
 
   const onViewableItemsChanged = useCallback(
     ({ viewableItems }: { viewableItems: Array<ViewToken> }) => {
@@ -192,25 +225,18 @@ export default function ChatRoom() {
       timestamp: new Date().toISOString(),
       type: 'text',
       statusMap: {
-        [user.id]: 'sent' // only sender has it as 'sent' initially
+        [user.id]: 'sent'
       },
       seenBy: []
     };
 
     try {
-      // Add message to subcollection
       await addDoc(collection(db, 'chats', id as string, 'messages'), messageData);
-
-      // Update chat's last message
       await updateDoc(doc(db, 'chats', id as string), {
         lastMessage: messageData,
         updatedAt: new Date().toISOString(),
       });
-
       setNewMessage('');
-
-      // Scroll to bottom
-      flatListRef.current?.scrollToEnd();
     } catch (error) {
       console.error('Error sending message:', error);
     }
@@ -218,26 +244,12 @@ export default function ChatRoom() {
 
   const renderMessage = ({ item }: { item: Message }) => {
     const isOwnMessage = item.senderId === user?.id;
-    //const userStatus = user?.id && item.statusMap ? item.statusMap[user.id] : undefined;
     let userStatus: string | undefined = undefined;
 
-
     if (isOwnMessage && item.statusMap) {
-
       const otherStatuses = Object.entries(item.statusMap)
-        .filter(([uid]) => uid !== user?.id)  // ignore self
+        .filter(([uid]) => uid !== user?.id)
         .map(([, status]) => status);
-
-
-      if (otherStatuses.some(status => status === 'read')) {
-        userStatus = 'read';
-      } else if (otherStatuses.some(status => status === 'delivered')) {
-        userStatus = 'delivered';
-      } else if (otherStatuses.some(status => status === 'sent')) {
-        userStatus = 'sent';
-      } else {
-        userStatus = undefined;
-      }
 
       const highestStatus = otherStatuses.reduce((highest, current) => {
         return statusPriority[current] > statusPriority[highest] ? current : highest;
@@ -266,12 +278,6 @@ export default function ChatRoom() {
           {!isOwnMessage && (
             <Text style={styles.senderName}>{item.senderName}</Text>
           )}
-          {/* <Text style={[
-            styles.messageText,
-            isOwnMessage ? styles.ownMessageText : styles.otherMessageText
-          ]}>
-            {item.content}
-          </Text> */}
           <ParsedText
             style={[
               styles.messageText,
@@ -281,7 +287,7 @@ export default function ChatRoom() {
               {
                 type: 'url',
                 style: {
-                  color: isOwnMessage ? '#269999' : '#3dd9d6', // Darker teal for own messages
+                  color: isOwnMessage ? '#269999' : '#3dd9d6',
                   textDecorationLine: 'underline'
                 },
                 onPress: async (url) => {
@@ -301,13 +307,12 @@ export default function ChatRoom() {
           <Text style={styles.timestamp}>
             {new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
           </Text>
-          {/* Updated message status rendering */}
           {isOwnMessage && (
             <Text style={styles.messageStatus}>
               {userStatus === 'read'
-                ? 'Delivered'
+                ? 'Read'
                 : userStatus === 'delivered'
-                  ? 'Read'
+                  ? 'Delivered'
                   : 'Sent'}
             </Text>
           )}
@@ -329,16 +334,10 @@ export default function ChatRoom() {
     </View>
   );
 
-  if (loading) {
-    return (
-      <View style={styles.container}>
-        <Text style={styles.loadingText}>Loading chat...</Text>
-      </View>
-    );
-  }
   const viewabilityConfig = {
-    itemVisiblePercentThreshold: 80, // only mark as read if 80% visible
+    itemVisiblePercentThreshold: 80,
   };
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -357,18 +356,27 @@ export default function ChatRoom() {
         </TouchableOpacity>
       )}
 
-      <FlatList
-        ref={flatListRef}
-        data={messages}
-        renderItem={renderMessage}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.messagesList}
-        onContentSizeChange={() => flatListRef.current?.scrollToEnd()}
-        onViewableItemsChanged={onViewableItemsChanged}
-        viewabilityConfig={viewabilityConfig}
-      />
-
-
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Loading messages...</Text>
+        </View>
+      ) : (
+        <FlatList
+          ref={flatListRef}
+          data={messages}
+          renderItem={renderMessage}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.messagesList}
+          inverted={true}
+          onEndReached={handleLoadMore}
+          onEndReachedThreshold={0.5}
+          ListFooterComponent={loadingMore ? (
+            <Text style={styles.loadingText}>Loading more messages...</Text>
+          ) : null}
+          onViewableItemsChanged={onViewableItemsChanged}
+          viewabilityConfig={viewabilityConfig}
+        />
+      )}
 
       <View style={styles.inputContainer}>
         <TextInput
@@ -584,8 +592,13 @@ const styles = StyleSheet.create({
     textTransform: 'capitalize',
   },
   messageStatus: {
-    fontSize: 8,  // Adjust the font size as needed
-    color: 'gray', // Adjust the color as needed
-    marginTop: 5,  // Add some space if needed
+    fontSize: 8,
+    color: 'gray',
+    marginTop: 5,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });
