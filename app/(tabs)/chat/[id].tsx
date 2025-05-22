@@ -69,7 +69,13 @@ export default function ChatRoom() {
           messagesList.push({ id: doc.id, ...doc.data() } as Message);
         });
 
-        setMessages(messagesList);
+        // Ensure messages have unique IDs by combining message ID with timestamp
+        const uniqueMessages = messagesList.map(message => ({
+          ...message,
+          uniqueId: `${message.id}-${message.timestamp}`
+        }));
+
+        setMessages(uniqueMessages);
         setLastMessageDoc(messagesSnapshot.docs[messagesSnapshot.docs.length - 1]);
         setHasMoreMessages(messagesSnapshot.docs.length === MESSAGES_PER_PAGE);
         setLoading(false);
@@ -85,7 +91,11 @@ export default function ChatRoom() {
           (snapshot) => {
             snapshot.docChanges().forEach((change) => {
               if (change.type === 'added') {
-                const newMessage = { id: change.doc.id, ...change.doc.data() } as Message;
+                const newMessage = { 
+                  id: change.doc.id, 
+                  ...change.doc.data(),
+                  uniqueId: `${change.doc.id}-${change.doc.data().timestamp}` 
+                } as Message & { uniqueId: string };
                 setMessages(prev => [newMessage, ...prev]);
               }
             });
@@ -121,7 +131,13 @@ export default function ChatRoom() {
       });
 
       if (moreMessagesList.length > 0) {
-        setMessages(prev => [...prev, ...moreMessagesList]);
+        // Ensure loaded messages have unique IDs
+        const uniqueMessages = moreMessagesList.map(message => ({
+          ...message,
+          uniqueId: `${message.id}-${message.timestamp}`
+        }));
+        
+        setMessages(prev => [...prev, ...uniqueMessages]);
         setLastMessageDoc(moreMessagesSnapshot.docs[moreMessagesSnapshot.docs.length - 1]);
         setHasMoreMessages(moreMessagesList.length === MESSAGES_PER_PAGE);
       } else {
@@ -162,7 +178,7 @@ export default function ChatRoom() {
     }
   };
 
-  const renderMessage = ({ item }: { item: Message }) => {
+  const renderMessage = ({ item }: { item: Message & { uniqueId: string } }) => {
     const isOwnMessage = item.senderId === user?.id;
     let userStatus = isOwnMessage && item.statusMap ? 
       Object.entries(item.statusMap)
@@ -277,7 +293,7 @@ export default function ChatRoom() {
         ref={flatListRef}
         data={messages}
         renderItem={renderMessage}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item: Message & { uniqueId: string }) => item.uniqueId}
         contentContainerStyle={styles.messagesList}
         inverted
         onEndReached={loadMoreMessages}
