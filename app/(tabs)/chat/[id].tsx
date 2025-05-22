@@ -193,6 +193,12 @@ export default function ChatRoom() {
 
   const handleLoadMore = async () => {
     if (loadingMore || !hasMoreMessages) return;
+    
+    if (messages.length >= 100) {
+      setHasMoreMessages(false);
+      return;
+    }
+    
     setLoadingMore(true);
     await loadMessages(false);
   };
@@ -383,19 +389,26 @@ export default function ChatRoom() {
           keyExtractor={(item) => item.uniqueKey}
           contentContainerStyle={styles.messagesList}
           inverted
-          onEndReached={handleLoadMore}
+          onEndReached={hasMoreMessages ? handleLoadMore : null}
           onEndReachedThreshold={0.5}
-          ListFooterComponent={loadingMore ? (
-            <View style={styles.loadingMoreContainer}>
-              <Text style={styles.loadingText}>Loading more messages...</Text>
-            </View>
-          ) : null}
+          ListFooterComponent={
+            loadingMore ? (
+              <View style={styles.loadingMoreContainer}>
+                <Text style={styles.loadingText}>Loading more messages...</Text>
+              </View>
+            ) : !hasMoreMessages && messages.length > 0 ? (
+              <View style={styles.endOfMessagesContainer}>
+                <Text style={styles.endOfMessagesText}>No more messages</Text>
+              </View>
+            ) : null
+          }
           onViewableItemsChanged={onViewableItemsChanged}
           viewabilityConfig={viewabilityConfig}
           maintainVisibleContentPosition={{
             minIndexForVisible: 0,
             autoscrollToTopThreshold: 10
           }}
+          scrollEnabled={hasMoreMessages || messages.length === 0}
         />
       )}
 
@@ -640,5 +653,18 @@ const styles = StyleSheet.create({
   loadingMoreContainer: {
     padding: 10,
     alignItems: 'center'
+  },
+  endOfMessagesContainer: {
+    padding: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(61, 217, 214, 0.1)',
+    borderRadius: 8,
+    marginBottom: 16,
+  },
+  endOfMessagesText: {
+    color: '#3dd9d6',
+    fontSize: 14,
+    fontWeight: '500',
   }
 });
