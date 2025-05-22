@@ -277,7 +277,7 @@ export default function ChatRoom() {
         ref={flatListRef}
         data={messages}
         renderItem={renderMessage}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item) => `${item.id}-${item.timestamp}`}
         contentContainerStyle={styles.messagesList}
         inverted
         onEndReached={loadMoreMessages}
