@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { StyleSheet, View, Text, ScrollView, TextInput, TouchableOpacity, Alert, Image, AppState, Linking, KeyboardAvoidingView, Platform} from 'react-native';
+import { StyleSheet, View, Text, ScrollView, TextInput, TouchableOpacity, Alert, Image, AppState, Linking, KeyboardAvoidingView, Platform } from 'react-native';
 import { doc, getDoc, collection, query, where, getDocs, orderBy, onSnapshot, addDoc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { useRouter } from 'expo-router';
 import { Send, Trash2, Cloud, CloudRain, Sun, Wind, CloudLightning, CloudSnow, CloudFog, Users, Calendar, OctagonAlert as AlertOctagon } from 'lucide-react-native';
@@ -161,11 +161,24 @@ export default function MemberDashboard() {
     return () => unsubscribe();
   }, [user]);
 
-  const getLocationWithTimeout = (timeout = 10000): Promise<Location.LocationObject> => {
-    return Promise.race<Location.LocationObject>([
-      Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
-      new Promise<Location.LocationObject>((_, reject) => setTimeout(() => reject(new Error('Location timeout')), timeout)),
-    ]);
+  const getLocationWithTimeout = async (timeout = 10000): Promise<Location.LocationObject> => {
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('Location timeout')), timeout)
+    );
+
+    try {
+      const location = await Promise.race([
+        Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.High,
+        }),
+        timeoutPromise,
+      ]);
+
+      return location;
+    } catch (error) {
+      console.warn('getLocationWithTimeout error:', error);
+      throw error;
+    }
   };
 
 
@@ -489,7 +502,7 @@ export default function MemberDashboard() {
   };
 
   return (
-    <KeyboardAvoidingView 
+    <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}

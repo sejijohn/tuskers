@@ -1,6 +1,12 @@
 
 export default ({ config }) => ({
     ...config,
+    owner: 'sejijohn', // Replace with your Expo username or organization name
+    slug: 'tuskers', // Replace with your project slug
+    android: {
+      package: 'com.tuskers.app', // Replace with your unique package name
+      googleServicesFile: './google-services.json', // Uncomment and provide the path if you use Firebase
+    },
     version: process.env.APP_VERSION ?? "1.0.0",
     extra: {
       firebaseApiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
