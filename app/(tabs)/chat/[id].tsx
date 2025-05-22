@@ -290,44 +290,48 @@ export default function ChatRoom() {
           {!isOwnMessage && (
             <Text style={styles.senderName}>{item.senderName}</Text>
           )}
-          <ParsedText
-            style={[
-              styles.messageText,
-              isOwnMessage ? styles.ownMessageText : styles.otherMessageText
-            ]}
-            parse={[
-              {
-                type: 'url',
-                style: {
-                  color: isOwnMessage ? '#269999' : '#3dd9d6',
-                  textDecorationLine: 'underline'
-                },
-                onPress: async (url) => {
-                  const supported = await Linking.canOpenURL(url);
-                  if (supported) {
-                    Linking.openURL(url);
-                  } else {
-                    Alert.alert("Can't open this URL:", url);
+          <View style={styles.messageTextContainer}>
+            <ParsedText
+              style={[
+                styles.messageText,
+                isOwnMessage ? styles.ownMessageText : styles.otherMessageText
+              ]}
+              parse={[
+                {
+                  type: 'url',
+                  style: {
+                    color: isOwnMessage ? '#269999' : '#3dd9d6',
+                    textDecorationLine: 'underline'
+                  },
+                  onPress: async (url) => {
+                    const supported = await Linking.canOpenURL(url);
+                    if (supported) {
+                      Linking.openURL(url);
+                    } else {
+                      Alert.alert("Can't open this URL:", url);
+                    }
                   }
                 }
-              }
-            ]}
-            childrenProps={{ allowFontScaling: false }}
-          >
-            {item.content}
-          </ParsedText>
-          <Text style={styles.timestamp}>
-            {new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-          </Text>
-          {isOwnMessage && (
-            <Text style={styles.messageStatus}>
-              {userStatus === 'read'
-                ? 'Read'
-                : userStatus === 'delivered'
-                  ? 'Delivered'
-                  : 'Sent'}
+              ]}
+              childrenProps={{ allowFontScaling: false }}
+            >
+              {item.content}
+            </ParsedText>
+          </View>
+          <View style={styles.messageFooter}>
+            <Text style={styles.timestamp}>
+              {new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             </Text>
-          )}
+            {isOwnMessage && (
+              <Text style={styles.messageStatus}>
+                {userStatus === 'read'
+                  ? 'Read'
+                  : userStatus === 'delivered'
+                    ? 'Delivered'
+                    : 'Sent'}
+              </Text>
+            )}
+          </View>
         </View>
       </View>
     );
@@ -458,11 +462,12 @@ const styles = StyleSheet.create({
   messageContainer: {
     flexDirection: 'row',
     marginBottom: 16,
-    maxWidth: '80%',
-    width: '100%',
+    maxWidth: '85%',
+    alignSelf: 'flex-start',
   },
   ownMessage: {
     alignSelf: 'flex-end',
+    flexDirection: 'row-reverse',
   },
   otherMessage: {
     alignSelf: 'flex-start',
@@ -471,12 +476,13 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    marginRight: 8,
+    marginHorizontal: 8,
   },
   messageContent: {
     borderRadius: 16,
     padding: 12,
-    flex: 1,
+    minWidth: 80,
+    maxWidth: '100%',
   },
   ownMessageContent: {
     backgroundColor: '#3dd9d6',
@@ -484,15 +490,14 @@ const styles = StyleSheet.create({
   otherMessageContent: {
     backgroundColor: '#243c44',
   },
-  senderName: {
-    fontSize: 12,
-    color: '#3dd9d6',
-    marginBottom: 4,
+  messageTextContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
   },
   messageText: {
     fontSize: 16,
-    marginBottom: 4,
-    flexWrap: 'wrap',
+    lineHeight: 22,
+    flexShrink: 1,
   },
   ownMessageText: {
     color: '#1a2f35',
@@ -500,10 +505,26 @@ const styles = StyleSheet.create({
   otherMessageText: {
     color: '#ffffff',
   },
+  messageFooter: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    marginTop: 4,
+    gap: 4,
+  },
   timestamp: {
     fontSize: 10,
     color: 'rgba(255, 255, 255, 0.5)',
-    alignSelf: 'flex-end',
+  },
+  messageStatus: {
+    fontSize: 10,
+    color: '#1a2f35',
+    opacity: 0.7,
+  },
+  senderName: {
+    fontSize: 12,
+    color: '#3dd9d6',
+    marginBottom: 4,
   },
   inputContainer: {
     flexDirection: 'row',
@@ -611,11 +632,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: 'rgba(255, 255, 255, 0.7)',
     textTransform: 'capitalize',
-  },
-  messageStatus: {
-    fontSize: 8,
-    color: 'gray',
-    marginTop: 5,
   },
   loadingContainer: {
     flex: 1,
