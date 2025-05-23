@@ -30,6 +30,7 @@ export default function ChatRoom() {
 
   useEffect(() => {
     if (!id) return;
+    let unsubscribe: (() => void) | null = null;
 
     const fetchChat = async () => {
       try {
@@ -72,17 +73,18 @@ export default function ChatRoom() {
         // Ensure messages have unique IDs by combining message ID with timestamp
         const uniqueMessages = messagesList.map(message => ({
           ...message,
-          uniqueId: `${message.id}-${message.timestamp}`
+          //uniqueId: `${message.id}-${message.timestamp}`
         }));
 
-        setMessages(uniqueMessages);
+        //setMessages(uniqueMessages);
+        setMessages(messagesList);
         setLastMessageDoc(messagesSnapshot.docs[messagesSnapshot.docs.length - 1]);
         setHasMoreMessages(messagesSnapshot.docs.length === MESSAGES_PER_PAGE);
         setLoading(false);
         setIsFirstLoad(false);
 
         // Set up real-time listener for new messages
-        const unsubscribe = onSnapshot(
+        unsubscribe = onSnapshot(
           query(
             collection(db, 'chats', id as string, 'messages'),
             orderBy('timestamp', 'desc'),
@@ -91,12 +93,19 @@ export default function ChatRoom() {
           (snapshot) => {
             snapshot.docChanges().forEach((change) => {
               if (change.type === 'added') {
-                const newMessage = { 
-                  id: change.doc.id, 
+                const newMessage = {
+                  id: change.doc.id,
                   ...change.doc.data(),
-                  uniqueId: `${change.doc.id}-${change.doc.data().timestamp}` 
-                } as Message & { uniqueId: string };
-                setMessages(prev => [newMessage, ...prev]);
+                  //uniqueId: `${change.doc.id}-${change.doc.data().timestamp}` 
+                } as Message; //& { uniqueId: string };
+                //setMessages(prev => [newMessage, ...prev]);
+                setMessages(prev => {
+                  const exists = prev.some(msg => msg.id === newMessage.id);
+                  if (!exists) {
+                    return [newMessage, ...prev];
+                  }
+                  return prev;
+                });
               }
             });
           }
@@ -134,10 +143,11 @@ export default function ChatRoom() {
         // Ensure loaded messages have unique IDs
         const uniqueMessages = moreMessagesList.map(message => ({
           ...message,
-          uniqueId: `${message.id}-${message.timestamp}`
+          //uniqueId: `${message.id}-${message.timestamp}`
         }));
-        
-        setMessages(prev => [...prev, ...uniqueMessages]);
+
+        //setMessages(prev => [...prev, ...uniqueMessages]);
+        setMessages(prev => [...prev, ...moreMessagesList]);
         setLastMessageDoc(moreMessagesSnapshot.docs[moreMessagesSnapshot.docs.length - 1]);
         setHasMoreMessages(moreMessagesList.length === MESSAGES_PER_PAGE);
       } else {
@@ -178,14 +188,14 @@ export default function ChatRoom() {
     }
   };
 
-  const renderMessage = ({ item }: { item: Message & { uniqueId: string } }) => {
+  const renderMessage = ({ item }: { item: Message /*& { uniqueId: string }*/ }) => {
     const isOwnMessage = item.senderId === user?.id;
-    let userStatus = isOwnMessage && item.statusMap ? 
+    let userStatus = isOwnMessage && item.statusMap ?
       Object.entries(item.statusMap)
         .filter(([uid]) => uid !== user?.id)
-        .reduce((highest, [, status]) => 
+        .reduce((highest, [, status]) =>
           statusPriority[status] > statusPriority[highest] ? status : highest
-        , 'sent') : item.statusMap?.[user?.id ?? ''];
+          , 'sent') : item.statusMap?.[user?.id ?? ''];
 
     return (
       <View style={[
@@ -293,7 +303,8 @@ export default function ChatRoom() {
         ref={flatListRef}
         data={messages}
         renderItem={renderMessage}
-        keyExtractor={(item: Message & { uniqueId: string }) => item.uniqueId}
+        //keyExtractor={(item: Message & { uniqueId: string }) => item.uniqueId}
+        keyExtractor={(item: Message) => item.id}
         contentContainerStyle={styles.messagesList}
         inverted
         onEndReached={loadMoreMessages}
