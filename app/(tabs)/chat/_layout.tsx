@@ -116,7 +116,11 @@ export default function ChatLayout() {
                     router.back();
                   }
                 }}
-                style={{ marginLeft: 8 }}
+                style={{
+                  marginLeft: 8,
+                  zIndex: 10,
+                  backgroundColor: 'transparent',
+                }}
               >
                 <ChevronLeft size={24} color="#3dd9d6" />
               </TouchableOpacity>

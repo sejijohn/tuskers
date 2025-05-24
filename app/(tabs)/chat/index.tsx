@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { StyleSheet, View, Text, FlatList, TouchableOpacity, Image, Alert, Linking } from 'react-native';
+import { StyleSheet, View, Text, FlatList, TouchableOpacity, Image, Alert, Linking, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { collection, query, where, onSnapshot, orderBy, getDocs, deleteDoc, doc, addDoc, updateDoc, getDoc, increment } from 'firebase/firestore';
 import { MessageSquarePlus, Users, Trash2, Shield, PlusCircle, BarChart as ChartBar, List } from 'lucide-react-native';
@@ -298,18 +298,20 @@ export default function ChatList() {
           deleting === item.id && styles.deleteButtonDisabled
         ]}
         onPress={() => {
-          Alert.alert(
-            'Delete Chat',
-            'Are you sure you want to delete this chat?',
-            [
-              { text: 'Cancel', style: 'cancel' },
-              {
-                text: 'Delete',
-                style: 'destructive',
-                onPress: () => handleDeleteChat(item.id)
-              }
-            ]
-          );
+          setTimeout(() => {
+            Alert.alert(
+              'Delete Chat',
+              'Are you sure you want to delete this chat?',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Delete',
+                  style: 'destructive',
+                  onPress: () => handleDeleteChat(item.id),
+                },
+              ]
+            );
+          }, 0);
         }}
         disabled={deleting === item.id}
       >
@@ -398,7 +400,8 @@ export default function ChatList() {
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Chats</Text>
-        <View style={styles.headerButtons}>
+        {/* <View style={styles.headerButtons}> */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.headerButtons}>
           <TouchableOpacity
             style={[styles.newChatButton, styles.pollButton, activePoll && styles.disabledButton]}
             onPress={() => {
@@ -422,10 +425,6 @@ export default function ChatList() {
               All Polls
             </Text>
           </TouchableOpacity>
-
-
-
-
           {user?.role === 'member' && (
             <TouchableOpacity
               style={[styles.newChatButton, styles.adminChatButton]}
@@ -440,9 +439,9 @@ export default function ChatList() {
           >
             <MessageSquarePlus size={24} color="#3dd9d6" />
           </TouchableOpacity>
-        </View>
+        </ScrollView>
+        {/* </View> */}
       </View>
-
       <FlatList
         data={chats}
         renderItem={renderChatItem}

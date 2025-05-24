@@ -11,6 +11,37 @@ import { KeyboardAvoidingWrapper } from '../components/KeyboardAvoidingWrapper';
 import * as Location from 'expo-location';
 import { useFocusEffect } from '@react-navigation/native';
 import ParsedText from 'react-native-parsed-text';
+import { LOCATION_TASK_NAME } from '../components/backgroundLocationTask';
+
+interface Weather {
+  temperature: number;
+  weatherCode: number;
+  windSpeed: number;
+  humidity: number;
+  precipitation: number;
+}
+
+
+const startBackgroundLocation = async () => {
+  const { status: fgStatus } = await Location.requestForegroundPermissionsAsync();
+  const { status: bgStatus } = await Location.requestBackgroundPermissionsAsync();
+
+  if (fgStatus === 'granted' && bgStatus === 'granted') {
+    const hasStarted = await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK_NAME);
+    if (!hasStarted) {
+      await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
+        accuracy: Location.Accuracy.Balanced,
+        timeInterval: 60000, // every 60s
+        distanceInterval: 100, // every 100m
+        showsBackgroundLocationIndicator: true,
+        foregroundService: {
+          notificationTitle: 'Location Active',
+          notificationBody: 'Tracking location in background',
+        },
+      });
+    }
+  }
+};
 
 
 const motorcycleImages = [
@@ -32,13 +63,7 @@ const motorcycleImages = [
   }
 ];
 
-interface Weather {
-  temperature: number;
-  weatherCode: number;
-  windSpeed: number;
-  humidity: number;
-  precipitation: number;
-}
+
 
 const celsiusToFahrenheit = (celsius: number) => Math.round(celsius * 9 / 5 + 32);
 const kmhToMph = (kmh: number) => Math.round(kmh * 0.621371);
@@ -63,6 +88,7 @@ export default function MemberDashboard() {
 
   useFocusEffect(
     useCallback(() => {
+      startBackgroundLocation();
       fetchWeather();
     }, [])
   );
