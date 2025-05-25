@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { StyleSheet, View, Text, TextInput, TouchableOpacity, FlatList, KeyboardAvoidingView, Platform, Image, Modal, ViewToken, Linking, Alert, TouchableWithoutFeedback, Keyboard } from 'react-native';
+import { StyleSheet, View, Text, TextInput, TouchableOpacity, FlatList, KeyboardAvoidingView, Platform, Image, Modal, ViewToken, Linking, Alert, TouchableWithoutFeedback, Keyboard, SafeAreaView } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { collection, query, orderBy, onSnapshot, addDoc, doc, getDoc, updateDoc, limit, startAfter, getDocs } from 'firebase/firestore';
 import { Send, Users, X } from 'lucide-react-native';
@@ -281,16 +281,20 @@ export default function ChatRoom() {
     read: 3,
   };
 
+  const KeyboardDismissHandler = ({ children }: { children: React.ReactNode }) => (
+  <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+    {children}
+  </TouchableWithoutFeedback>
+);
+
   return (
+  <SafeAreaView style={[{ flex: 1 }, styles.container]}>
     <KeyboardAvoidingView
-      style={styles.container}
+      style={{ flex: 1 }}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
     >
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-        <View style={{ flex: 1 }}>
-          {/* Optional group members button */}
-          {chat?.type === 'group' && (
+      {chat?.type === 'group' && (
             <TouchableOpacity
               style={styles.membersButton}
               onPress={() => setShowMembers(true)}
@@ -301,80 +305,76 @@ export default function ChatRoom() {
               </Text>
             </TouchableOpacity>
           )}
-
-          <FlatList
-            ref={flatListRef}
-            data={messages}
-            renderItem={renderMessage}
-            keyExtractor={(item: Message) => item.id}
-            contentContainerStyle={[
-              styles.messagesList,
-              Platform.OS === 'ios' ? { paddingTop: 80 } : { paddingBottom: 80 }
-            ]}
-            inverted
-            onEndReached={loadMoreMessages}
-            onEndReachedThreshold={0.5}
-            keyboardShouldPersistTaps="handled"
-            ListFooterComponent={loadingMore ? (
-              <View style={styles.loadingMoreContainer}>
-                <Text style={styles.loadingText}>Loading more messages...</Text>
-              </View>
-            ) : null}
-          />
-          <View style={styles.inputContainer}>
-            <TextInput
-              style={styles.input}
-              value={newMessage}
-              onChangeText={setNewMessage}
-              placeholder="Type a message..."
-              placeholderTextColor="rgba(255, 255, 255, 0.5)"
-              multiline
-            />
-            <TouchableOpacity
-              style={[
-                styles.sendButton,
-                !newMessage.trim() && styles.sendButtonDisabled
-              ]}
-              onPress={sendMessage}
-              disabled={!newMessage.trim()}
-            >
-              <Send
-                size={20}
-                color={newMessage.trim() ? '#3dd9d6' : 'rgba(61, 217, 214, 0.5)'}
-              />
-            </TouchableOpacity>
-          </View>
-
-          {/* Modal for group members stays as is */}
-        </View>
-      </TouchableWithoutFeedback>
-      <Modal
-        visible={showMembers}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowMembers(false)}
-      >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Group Members</Text>
-              <TouchableOpacity
-                style={styles.closeButton}
-                onPress={() => setShowMembers(false)}
-              >
-                <X size={24} color="#3dd9d6" />
-              </TouchableOpacity>
+      <View style={{ flex: 1 }}>
+        <FlatList
+          ref={flatListRef}
+          data={messages}
+          renderItem={renderMessage}
+          keyExtractor={(item: Message) => item.id}
+          inverted
+          onEndReached={loadMoreMessages}
+          onEndReachedThreshold={0.5}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          contentContainerStyle={{
+            flexGrow: 1,
+            justifyContent: 'flex-end',
+            paddingBottom: 80, // match your input height
+          }}
+          ListFooterComponent={loadingMore ? (
+            <View style={styles.loadingMoreContainer}>
+              <Text style={styles.loadingText}>Loading more...</Text>
             </View>
-            <FlatList
-              data={members}
-              renderItem={renderMemberItem}
-              keyExtractor={(item) => item.id}
-              contentContainerStyle={styles.membersList}
-            />
-          </View>
+          ) : null}
+        />
+
+        {/* Input bar */}
+        <View style={styles.inputContainer}>
+          <TextInput
+            value={newMessage}
+            onChangeText={setNewMessage}
+            style={styles.input}
+            placeholder="Type a message"
+            placeholderTextColor="#999"
+            multiline
+          />
+          <TouchableOpacity
+            onPress={sendMessage}
+            disabled={!newMessage.trim()}
+            style={styles.sendButton}
+          >
+            <Send size={20} color="#3dd9d6" />
+          </TouchableOpacity>
         </View>
-      </Modal>
+      </View>
+      <Modal
+            visible={showMembers}
+            transparent
+            animationType="slide"
+            onRequestClose={() => setShowMembers(false)}
+          >
+            <View style={styles.modalContainer}>
+              <View style={styles.modalContent}>
+                <View style={styles.modalHeader}>
+                  <Text style={styles.modalTitle}>Group Members</Text>
+                  <TouchableOpacity
+                    style={styles.closeButton}
+                    onPress={() => setShowMembers(false)}
+                  >
+                    <X size={24} color="#3dd9d6" />
+                  </TouchableOpacity>
+                </View>
+                <FlatList
+                  data={members}
+                  renderItem={renderMemberItem}
+                  keyExtractor={(item) => item.id}
+                  contentContainerStyle={styles.membersList}
+                />
+              </View>
+            </View>
+          </Modal>
     </KeyboardAvoidingView>
+  </SafeAreaView>
 
   );
 }
@@ -440,7 +440,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#243c44',
     borderTopWidth: 1,
     borderTopColor: 'rgba(61, 217, 214, 0.1)',
-    //marginBottom: 26,
+    marginBottom: 26,
   },
   input: {
     flex: 1,
