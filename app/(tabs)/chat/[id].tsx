@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { StyleSheet, View, Text, TextInput, TouchableOpacity, FlatList, KeyboardAvoidingView, Platform, Image, Modal, ViewToken, Linking, Alert } from 'react-native';
+import { StyleSheet, View, Text, TextInput, TouchableOpacity, FlatList, KeyboardAvoidingView, Platform, Image, Modal, ViewToken, Linking, Alert, TouchableWithoutFeedback, Keyboard } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { collection, query, orderBy, onSnapshot, addDoc, doc, getDoc, updateDoc, limit, startAfter, getDocs } from 'firebase/firestore';
 import { Send, Users, X } from 'lucide-react-native';
@@ -284,59 +284,70 @@ export default function ChatRoom() {
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
     >
-      {chat?.type === 'group' && (
-        <TouchableOpacity
-          style={styles.membersButton}
-          onPress={() => setShowMembers(true)}
-        >
-          <Users size={20} color="#3dd9d6" />
-          <Text style={styles.membersButtonText}>
-            {members.length} member{members.length !== 1 ? 's' : ''}
-          </Text>
-        </TouchableOpacity>
-      )}
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <View style={{ flex: 1 }}>
+          {/* Optional group members button */}
+          {chat?.type === 'group' && (
+            <TouchableOpacity
+              style={styles.membersButton}
+              onPress={() => setShowMembers(true)}
+            >
+              <Users size={20} color="#3dd9d6" />
+              <Text style={styles.membersButtonText}>
+                {members.length} member{members.length !== 1 ? 's' : ''}
+              </Text>
+            </TouchableOpacity>
+          )}
 
-      <FlatList
-        ref={flatListRef}
-        data={messages}
-        renderItem={renderMessage}
-        //keyExtractor={(item: Message & { uniqueId: string }) => item.uniqueId}
-        keyExtractor={(item: Message) => item.id}
-        contentContainerStyle={styles.messagesList}
-        inverted
-        onEndReached={loadMoreMessages}
-        onEndReachedThreshold={0.5}
-        ListFooterComponent={loadingMore ? (
-          <View style={styles.loadingMoreContainer}>
-            <Text style={styles.loadingText}>Loading more messages...</Text>
+          <FlatList
+            ref={flatListRef}
+            data={messages}
+            renderItem={renderMessage}
+            keyExtractor={(item: Message) => item.id}
+            contentContainerStyle={[
+              styles.messagesList,
+              Platform.OS === 'ios' ? { paddingTop: 80 } : { paddingBottom: 80 }
+            ]}
+            inverted
+            onEndReached={loadMoreMessages}
+            onEndReachedThreshold={0.5}
+            keyboardShouldPersistTaps="handled"
+            ListFooterComponent={loadingMore ? (
+              <View style={styles.loadingMoreContainer}>
+                <Text style={styles.loadingText}>Loading more messages...</Text>
+              </View>
+            ) : null}
+          />
+          <View style={styles.inputContainer}>
+            <TextInput
+              style={styles.input}
+              value={newMessage}
+              onChangeText={setNewMessage}
+              placeholder="Type a message..."
+              placeholderTextColor="rgba(255, 255, 255, 0.5)"
+              multiline
+            />
+            <TouchableOpacity
+              style={[
+                styles.sendButton,
+                !newMessage.trim() && styles.sendButtonDisabled
+              ]}
+              onPress={sendMessage}
+              disabled={!newMessage.trim()}
+            >
+              <Send
+                size={20}
+                color={newMessage.trim() ? '#3dd9d6' : 'rgba(61, 217, 214, 0.5)'}
+              />
+            </TouchableOpacity>
           </View>
-        ) : null}
-      />
 
-      <View style={styles.inputContainer}>
-        <TextInput
-          style={styles.input}
-          value={newMessage}
-          onChangeText={setNewMessage}
-          placeholder="Type a message..."
-          placeholderTextColor="rgba(255, 255, 255, 0.5)"
-          multiline
-        />
-        <TouchableOpacity
-          style={[
-            styles.sendButton,
-            !newMessage.trim() && styles.sendButtonDisabled
-          ]}
-          onPress={sendMessage}
-          disabled={!newMessage.trim()}
-        >
-          <Send size={20} color={newMessage.trim() ? '#3dd9d6' : 'rgba(61, 217, 214, 0.5)'} />
-        </TouchableOpacity>
-      </View>
-
+          {/* Modal for group members stays as is */}
+        </View>
+      </TouchableWithoutFeedback>
       <Modal
         visible={showMembers}
         transparent
@@ -364,6 +375,7 @@ export default function ChatRoom() {
         </View>
       </Modal>
     </KeyboardAvoidingView>
+
   );
 }
 
@@ -428,7 +440,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#243c44',
     borderTopWidth: 1,
     borderTopColor: 'rgba(61, 217, 214, 0.1)',
-    marginBottom: 26,
+    //marginBottom: 26,
   },
   input: {
     flex: 1,
