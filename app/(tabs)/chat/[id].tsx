@@ -70,13 +70,6 @@ export default function ChatRoom() {
           messagesList.push({ id: doc.id, ...doc.data() } as Message);
         });
 
-        // Ensure messages have unique IDs by combining message ID with timestamp
-        const uniqueMessages = messagesList.map(message => ({
-          ...message,
-          //uniqueId: `${message.id}-${message.timestamp}`
-        }));
-
-        //setMessages(uniqueMessages);
         setMessages(messagesList);
         setLastMessageDoc(messagesSnapshot.docs[messagesSnapshot.docs.length - 1]);
         setHasMoreMessages(messagesSnapshot.docs.length === MESSAGES_PER_PAGE);
@@ -96,9 +89,7 @@ export default function ChatRoom() {
                 const newMessage = {
                   id: change.doc.id,
                   ...change.doc.data(),
-                  //uniqueId: `${change.doc.id}-${change.doc.data().timestamp}` 
-                } as Message; //& { uniqueId: string };
-                //setMessages(prev => [newMessage, ...prev]);
+                } as Message;
                 setMessages(prev => {
                   const exists = prev.some(msg => msg.id === newMessage.id);
                   if (!exists) {
@@ -140,13 +131,6 @@ export default function ChatRoom() {
       });
 
       if (moreMessagesList.length > 0) {
-        // Ensure loaded messages have unique IDs
-        const uniqueMessages = moreMessagesList.map(message => ({
-          ...message,
-          //uniqueId: `${message.id}-${message.timestamp}`
-        }));
-
-        //setMessages(prev => [...prev, ...uniqueMessages]);
         setMessages(prev => [...prev, ...moreMessagesList]);
         setLastMessageDoc(moreMessagesSnapshot.docs[moreMessagesSnapshot.docs.length - 1]);
         setHasMoreMessages(moreMessagesList.length === MESSAGES_PER_PAGE);
@@ -188,7 +172,7 @@ export default function ChatRoom() {
     }
   };
 
-  const renderMessage = ({ item }: { item: Message /*& { uniqueId: string }*/ }) => {
+  const renderMessage = ({ item }: { item: Message }) => {
     const isOwnMessage = item.senderId === user?.id;
     let userStatus = isOwnMessage && item.statusMap ?
       Object.entries(item.statusMap)
@@ -282,100 +266,99 @@ export default function ChatRoom() {
   };
 
   const KeyboardDismissHandler = ({ children }: { children: React.ReactNode }) => (
-  <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
-    {children}
-  </TouchableWithoutFeedback>
-);
+    <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+      {children}
+    </TouchableWithoutFeedback>
+  );
 
   return (
-  <SafeAreaView style={[{ flex: 1 }, styles.container]}>
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
-    >
-      {chat?.type === 'group' && (
-            <TouchableOpacity
-              style={styles.membersButton}
-              onPress={() => setShowMembers(true)}
-            >
-              <Users size={20} color="#3dd9d6" />
-              <Text style={styles.membersButtonText}>
-                {members.length} member{members.length !== 1 ? 's' : ''}
-              </Text>
-            </TouchableOpacity>
-          )}
-      <View style={{ flex: 1 }}>
-        <FlatList
-          ref={flatListRef}
-          data={messages}
-          renderItem={renderMessage}
-          keyExtractor={(item: Message) => item.id}
-          inverted
-          onEndReached={loadMoreMessages}
-          onEndReachedThreshold={0.5}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="on-drag"
-          contentContainerStyle={{
-            flexGrow: 1,
-            justifyContent: 'flex-end',
-            paddingBottom: 80, // match your input height
-          }}
-          ListFooterComponent={loadingMore ? (
-            <View style={styles.loadingMoreContainer}>
-              <Text style={styles.loadingText}>Loading more...</Text>
-            </View>
-          ) : null}
-        />
-
-        {/* Input bar */}
-        <View style={styles.inputContainer}>
-          <TextInput
-            value={newMessage}
-            onChangeText={setNewMessage}
-            style={styles.input}
-            placeholder="Type a message"
-            placeholderTextColor="#999"
-            multiline
-          />
+    <SafeAreaView style={[{ flex: 1 }, styles.container]}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+      >
+        {chat?.type === 'group' && (
           <TouchableOpacity
-            onPress={sendMessage}
-            disabled={!newMessage.trim()}
-            style={styles.sendButton}
+            style={styles.membersButton}
+            onPress={() => setShowMembers(true)}
           >
-            <Send size={20} color="#3dd9d6" />
+            <Users size={20} color="#3dd9d6" />
+            <Text style={styles.membersButtonText}>
+              {members.length} member{members.length !== 1 ? 's' : ''}
+            </Text>
           </TouchableOpacity>
-        </View>
-      </View>
-      <Modal
-            visible={showMembers}
-            transparent
-            animationType="slide"
-            onRequestClose={() => setShowMembers(false)}
-          >
-            <View style={styles.modalContainer}>
-              <View style={styles.modalContent}>
-                <View style={styles.modalHeader}>
-                  <Text style={styles.modalTitle}>Group Members</Text>
-                  <TouchableOpacity
-                    style={styles.closeButton}
-                    onPress={() => setShowMembers(false)}
-                  >
-                    <X size={24} color="#3dd9d6" />
-                  </TouchableOpacity>
-                </View>
-                <FlatList
-                  data={members}
-                  renderItem={renderMemberItem}
-                  keyExtractor={(item) => item.id}
-                  contentContainerStyle={styles.membersList}
-                />
+        )}
+        <View style={{ flex: 1 }}>
+          <FlatList
+            ref={flatListRef}
+            data={messages}
+            renderItem={renderMessage}
+            keyExtractor={(item: Message) => item.id}
+            inverted
+            onEndReached={loadMoreMessages}
+            onEndReachedThreshold={0.5}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+            contentContainerStyle={{
+              flexGrow: 1,
+              justifyContent: 'flex-end',
+              paddingBottom: 80, // match your input height
+            }}
+            ListFooterComponent={loadingMore ? (
+              <View style={styles.loadingMoreContainer}>
+                <Text style={styles.loadingText}>Loading more...</Text>
               </View>
-            </View>
-          </Modal>
-    </KeyboardAvoidingView>
-  </SafeAreaView>
+            ) : null}
+          />
 
+          {/* Input bar */}
+          <View style={styles.inputContainer}>
+            <TextInput
+              value={newMessage}
+              onChangeText={setNewMessage}
+              style={styles.input}
+              placeholder="Type a message"
+              placeholderTextColor="#999"
+              multiline
+            />
+            <TouchableOpacity
+              onPress={sendMessage}
+              disabled={!newMessage.trim()}
+              style={styles.sendButton}
+            >
+              <Send size={20} color="#3dd9d6" />
+            </TouchableOpacity>
+          </View>
+        </View>
+        <Modal
+          visible={showMembers}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setShowMembers(false)}
+        >
+          <View style={styles.modalContainer}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Group Members</Text>
+                <TouchableOpacity
+                  style={styles.closeButton}
+                  onPress={() => setShowMembers(false)}
+                >
+                  <X size={24} color="#3dd9d6" />
+                </TouchableOpacity>
+              </View>
+              <FlatList
+                data={members}
+                renderItem={renderMemberItem}
+                keyExtractor={(item) => item.id}
+                contentContainerStyle={styles.membersList}
+              />
+            </View>
+          </View>
+        </Modal>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
