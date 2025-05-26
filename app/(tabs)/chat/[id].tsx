@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { StyleSheet, View, Text, TextInput, TouchableOpacity, FlatList, KeyboardAvoidingView, Platform, Image, Modal, ViewToken, Linking, Alert, TouchableWithoutFeedback, Keyboard, SafeAreaView } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
-import { collection, query, orderBy, onSnapshot, addDoc, doc, getDoc, updateDoc, limit, startAfter, getDocs } from 'firebase/firestore';
-import { Send, Users, X } from 'lucide-react-native';
+import { collection, query, orderBy, onSnapshot, addDoc, doc, getDoc, updateDoc, limit, startAfter, getDocs, where } from 'firebase/firestore';
+import { Send, Users, X, UserPlus, Check } from 'lucide-react-native';
 import { db } from '../../utils/firebase';
 import { useUser } from '../../context/UserContext';
 import { Message, Chat } from '../../types/chat';
@@ -27,6 +27,10 @@ export default function ChatRoom() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMoreMessages, setHasMoreMessages] = useState(true);
   const [isFirstLoad, setIsFirstLoad] = useState(true);
+  const [showAddMembers, setShowAddMembers] = useState(false);
+  const [eligibleUsers, setEligibleUsers] = useState<User[]>([]);
+  const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
+  const [addingMembers, setAddingMembers] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -57,7 +61,6 @@ export default function ChatRoom() {
           setMembers(membersData);
         }
 
-        // Initial messages query
         const messagesQuery = query(
           collection(db, 'chats', id as string, 'messages'),
           orderBy('timestamp', 'desc'),
@@ -76,7 +79,6 @@ export default function ChatRoom() {
         setLoading(false);
         setIsFirstLoad(false);
 
-        // Set up real-time listener for new messages
         unsubscribe = onSnapshot(
           query(
             collection(db, 'chats', id as string, 'messages'),
@@ -238,6 +240,80 @@ export default function ChatRoom() {
     );
   };
 
+  const fetchEligibleUsers = async () => {
+    try {
+      const usersQuery = query(
+        collection(db, 'users'),
+        where('approved', '==', true),
+        where('deleted', '==', false)
+      );
+      
+      const usersSnapshot = await getDocs(usersQuery);
+      const allUsers = usersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
+      
+      // Filter out users who are already in the chat
+      const eligibleUsers = allUsers.filter(user => 
+        !chat?.participants.includes(user.id)
+      );
+      
+      setEligibleUsers(eligibleUsers);
+    } catch (error) {
+      console.error('Error fetching eligible users:', error);
+      Alert.alert('Error', 'Failed to fetch users');
+    }
+  };
+
+  const handleAddMembers = async () => {
+    if (!chat || selectedUsers.length === 0) return;
+
+    try {
+      setAddingMembers(true);
+      const updatedParticipants = [...chat.participants, ...selectedUsers];
+      
+      await updateDoc(doc(db, 'chats', chat.id), {
+        participants: updatedParticipants,
+        updatedAt: new Date().toISOString(),
+      });
+
+      // Add system message about new members
+      const newMembersNames = selectedUsers
+        .map(id => eligibleUsers.find(user => user.id === id)?.fullName)
+        .filter(Boolean)
+        .join(', ');
+
+      const systemMessage: Omit<Message, 'id'> = {
+        content: `${newMembersNames} joined the group`,
+        senderId: 'system',
+        senderName: 'System',
+        senderPhotoURL: null,
+        timestamp: new Date().toISOString(),
+        type: 'text',
+        statusMap: {},
+        seenBy: []
+      };
+
+      await addDoc(collection(db, 'chats', chat.id, 'messages'), systemMessage);
+
+      // Update local state
+      const newMembers = await Promise.all(
+        selectedUsers.map(async (userId) => {
+          const userDoc = await getDoc(doc(db, 'users', userId));
+          return { id: userId, ...userDoc.data() } as User;
+        })
+      );
+
+      setMembers(prev => [...prev, ...newMembers]);
+      setSelectedUsers([]);
+      setShowAddMembers(false);
+      
+    } catch (error) {
+      console.error('Error adding members:', error);
+      Alert.alert('Error', 'Failed to add members');
+    } finally {
+      setAddingMembers(false);
+    }
+  };
+
   const renderMemberItem = ({ item }: { item: User }) => (
     <View style={styles.memberItem}>
       <Image
@@ -251,18 +327,33 @@ export default function ChatRoom() {
     </View>
   );
 
-  if (loading) {
+  const renderEligibleUserItem = ({ item }: { item: User }) => {
+    const isSelected = selectedUsers.includes(item.id);
+    
     return (
-      <View style={styles.container}>
-        <Text style={styles.loadingText}>Loading chat...</Text>
-      </View>
+      <TouchableOpacity 
+        style={[styles.eligibleUserItem, isSelected && styles.selectedUserItem]}
+        onPress={() => {
+          setSelectedUsers(prev => 
+            isSelected 
+              ? prev.filter(id => id !== item.id)
+              : [...prev, item.id]
+          );
+        }}
+      >
+        <Image
+          source={{ uri: item.photoURL || 'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?w=800&auto=format&fit=crop&q=80' }}
+          style={styles.memberAvatar}
+        />
+        <View style={styles.memberInfo}>
+          <Text style={styles.memberName}>{item.fullName}</Text>
+          <Text style={styles.memberRole}>{item.role}</Text>
+        </View>
+        {isSelected && (
+          <Check size={24} color="#3dd9d6" />
+        )}
+      </TouchableOpacity>
     );
-  }
-
-  const statusPriority: Record<string, number> = {
-    sent: 1,
-    delivered: 2,
-    read: 3,
   };
 
   const KeyboardDismissHandler = ({ children }: { children: React.ReactNode }) => (
@@ -270,6 +361,14 @@ export default function ChatRoom() {
       {children}
     </TouchableWithoutFeedback>
   );
+
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.loadingText}>Loading chat...</Text>
+      </View>
+    );
+  }
 
   return (
     <SafeAreaView style={[{ flex: 1 }, styles.container]}>
@@ -303,7 +402,7 @@ export default function ChatRoom() {
             contentContainerStyle={{
               flexGrow: 1,
               justifyContent: 'flex-end',
-              paddingBottom: 80, // match your input height
+              paddingBottom: 80,
             }}
             ListFooterComponent={loadingMore ? (
               <View style={styles.loadingMoreContainer}>
@@ -312,7 +411,6 @@ export default function ChatRoom() {
             ) : null}
           />
 
-          {/* Input bar */}
           <View style={styles.inputContainer}>
             <TextInput
               value={newMessage}
@@ -331,6 +429,8 @@ export default function ChatRoom() {
             </TouchableOpacity>
           </View>
         </View>
+
+        {/* Members Modal */}
         <Modal
           visible={showMembers}
           transparent
@@ -341,12 +441,26 @@ export default function ChatRoom() {
             <View style={styles.modalContent}>
               <View style={styles.modalHeader}>
                 <Text style={styles.modalTitle}>Group Members</Text>
-                <TouchableOpacity
-                  style={styles.closeButton}
-                  onPress={() => setShowMembers(false)}
-                >
-                  <X size={24} color="#3dd9d6" />
-                </TouchableOpacity>
+                <View style={styles.modalActions}>
+                  {chat?.type === 'group' && (user?.role === 'admin' || chat?.participants[0] === user?.id) && (
+                    <TouchableOpacity
+                      style={styles.addMemberButton}
+                      onPress={() => {
+                        setShowMembers(false);
+                        setShowAddMembers(true);
+                        fetchEligibleUsers();
+                      }}
+                    >
+                      <UserPlus size={24} color="#3dd9d6" />
+                    </TouchableOpacity>
+                  )}
+                  <TouchableOpacity
+                    style={styles.closeButton}
+                    onPress={() => setShowMembers(false)}
+                  >
+                    <X size={24} color="#3dd9d6" />
+                  </TouchableOpacity>
+                </View>
               </View>
               <FlatList
                 data={members}
@@ -354,6 +468,53 @@ export default function ChatRoom() {
                 keyExtractor={(item) => item.id}
                 contentContainerStyle={styles.membersList}
               />
+            </View>
+          </View>
+        </Modal>
+
+        {/* Add Members Modal */}
+        <Modal
+          visible={showAddMembers}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setShowAddMembers(false)}
+        >
+          <View style={styles.modalContainer}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Add Members</Text>
+                <TouchableOpacity
+                  style={styles.closeButton}
+                  onPress={() => {
+                    setShowAddMembers(false);
+                    setSelectedUsers([]);
+                  }}
+                >
+                  <X size={24} color="#3dd9d6" />
+                </TouchableOpacity>
+              </View>
+              
+              <FlatList
+                data={eligibleUsers}
+                renderItem={renderEligibleUserItem}
+                keyExtractor={(item) => item.id}
+                contentContainerStyle={styles.membersList}
+              />
+              
+              {selectedUsers.length > 0 && (
+                <TouchableOpacity
+                  style={[
+                    styles.addMembersButton,
+                    addingMembers && styles.addMembersButtonDisabled
+                  ]}
+                  onPress={handleAddMembers}
+                  disabled={addingMembers}
+                >
+                  <Text style={styles.addMembersButtonText}>
+                    {addingMembers ? 'Adding...' : `Add ${selectedUsers.length} Member${selectedUsers.length !== 1 ? 's' : ''}`}
+                  </Text>
+                </TouchableOpacity>
+              )}
             </View>
           </View>
         </Modal>
@@ -443,9 +604,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  sendButtonDisabled: {
-    opacity: 0.5,
-  },
   loadingText: {
     textAlign: 'center',
     marginTop: 24,
@@ -490,6 +648,11 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#3dd9d6',
   },
+  modalActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
   closeButton: {
     padding: 4,
   },
@@ -532,5 +695,36 @@ const styles = StyleSheet.create({
   loadingMoreContainer: {
     padding: 16,
     alignItems: 'center',
+  },
+  addMemberButton: {
+    padding: 4,
+  },
+  eligibleUserItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#243c44',
+    padding: 12,
+    borderRadius: 12,
+    marginBottom: 8,
+  },
+  selectedUserItem: {
+    backgroundColor: 'rgba(61, 217, 214, 0.1)',
+    borderWidth: 1,
+    borderColor: '#3dd9d6',
+  },
+  addMembersButton: {
+    backgroundColor: '#3dd9d6',
+    padding: 16,
+    borderRadius: 8,
+    margin: 16,
+    alignItems: 'center',
+  },
+  addMembersButtonDisabled: {
+    opacity: 0.5,
+  },
+  addMembersButtonText: {
+    color: '#1a2f35',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
