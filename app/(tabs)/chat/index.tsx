@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { StyleSheet, View, Text, FlatList, TouchableOpacity, Image, Alert, Linking } from 'react-native';
+import { StyleSheet, View, Text, FlatList, TouchableOpacity, Image, Alert, Linking,ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { collection, query, where, onSnapshot, orderBy, getDocs, deleteDoc, doc, addDoc, updateDoc, getDoc, increment } from 'firebase/firestore';
 import { MessageSquarePlus, Users, Trash2, Shield, PlusCircle, BarChart as ChartBar, List } from 'lucide-react-native';
@@ -357,6 +357,10 @@ export default function ChatList() {
         </View>
 
         {/* <Text style={styles.pollQuestion}>{activePoll.question}</Text> */}
+        <ScrollView 
+        style={styles.updatesList}
+        nestedScrollEnabled={true}
+        >
         <ParsedText
           style={styles.pollQuestion}
           parse={[
@@ -378,6 +382,7 @@ export default function ChatList() {
         >
           {activePoll.question}
         </ParsedText>
+        </ScrollView>
 
         <View style={styles.pollStats}>
           <Text style={styles.pollVotes}>{totalVotes} votes</Text>
@@ -422,10 +427,6 @@ export default function ChatList() {
               All Polls
             </Text>
           </TouchableOpacity>
-
-
-
-
           {user?.role === 'member' && (
             <TouchableOpacity
               style={[styles.newChatButton, styles.adminChatButton]}
@@ -680,5 +681,8 @@ const styles = StyleSheet.create({
   },
   disabledText: {
     color: '#999',
+  },
+   updatesList: {
+    maxHeight: 200,
   },
 });

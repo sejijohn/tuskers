@@ -7,7 +7,6 @@ import { auth, db } from '../utils/firebase';
 import { User } from '../types/user';
 import { Update } from '../types/update';
 import { Poll } from '../types/poll';
-import { KeyboardAvoidingWrapper } from '../components/KeyboardAvoidingWrapper';
 import * as Location from 'expo-location';
 import { useFocusEffect } from '@react-navigation/native';
 import ParsedText from 'react-native-parsed-text';
@@ -590,6 +589,10 @@ export default function MemberDashboard() {
               </View>
 
               <View style={styles.rideInfo}>
+                <ScrollView 
+                style={styles.updatesList}
+                nestedScrollEnabled={true}
+                >
                 <ParsedText
                   style={styles.rideQuestion}
                   parse={[
@@ -611,6 +614,7 @@ export default function MemberDashboard() {
                 >
                   {activeRidePoll.question}
                 </ParsedText>
+                </ScrollView>
 
                 <View style={styles.rideStats}>
                   <View style={styles.rideStat}>

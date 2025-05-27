@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "34498458933",
+    "firebase_url": "https://tuskers-8cbc4-default-rtdb.firebaseio.com",
+    "project_id": "tuskers-8cbc4",
+    "storage_bucket": "tuskers-8cbc4.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:34498458933:android:d7d5eee5872aaba124087c",
+        "android_client_info": {
+          "package_name": "com.tuskers.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBZeX8OPOvZUiRJrzPloFNov5zIwURLtSs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

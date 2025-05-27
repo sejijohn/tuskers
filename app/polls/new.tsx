@@ -16,7 +16,9 @@ export default function CreatePollScreen() {
   const [options, setOptions] = useState<string[]>([]);
   const [duration, setDuration] = useState('24'); // Duration in hours
   const [creating, setCreating] = useState(false);
-  const [isRidePoll, setIsRidePoll] = useState(false);
+  //const [isRidePoll, setIsRidePoll] = useState(false);
+  const [isRidePoll, setIsRidePoll] = useState<boolean | null>(null);
+  const [showError, setShowError] = useState(false);
 
   useEffect(() => {
     // Initialize options to empty when component first created
@@ -61,6 +63,10 @@ export default function CreatePollScreen() {
 
   const handleCreate = async () => {
     if (!user) return;
+    if (isRidePoll === null) {
+      setShowError(true);
+      return;
+    }
 
     // Validate inputs
     if (!question.trim()) {
@@ -89,7 +95,7 @@ export default function CreatePollScreen() {
         where('isActive', '==', true),
         where('isComplete', '==', false)
       );
-      
+
       const activePolls = await getDocs(activeQuery);
       if (!activePolls.empty) {
         Alert.alert('Error', 'There is already an active poll. Please wait for it to end or be deleted.');
@@ -125,20 +131,18 @@ export default function CreatePollScreen() {
   };
 
   return (
-    <KeyboardAvoidingView 
+    <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
     >
-      <ScrollView 
+      <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-
-
-<View style={styles.section}>
+        {/* <View style={styles.section}>
           <View style={styles.switchContainer}>
             <Text style={styles.switchLabel}>Is this poll for a ride?</Text>
             <Switch
@@ -153,11 +157,38 @@ export default function CreatePollScreen() {
               This poll will be used to organize a ride event
             </Text>
           )}
+        </View> */}
+        <View style={styles.section}>
+          <Text style={styles.switchLabel}>Is this poll for a ride?</Text>
+
+          <View style={styles.radioContainer}>
+            <TouchableOpacity
+              style={styles.radioOption}
+              onPress={() => setIsRidePoll(true)}
+            >
+              <View style={[styles.radioCircle, isRidePoll === true && styles.selectedRadio]} />
+              <Text style={styles.radioLabel}>Yes</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.radioOption}
+              onPress={() => setIsRidePoll(false)}
+            >
+              <View style={[styles.radioCircle, isRidePoll === false && styles.selectedRadio]} />
+              <Text style={styles.radioLabel}>No</Text>
+            </TouchableOpacity>
+          </View>
+
+          {isRidePoll !== null && (
+            <Text style={styles.hint}>
+              {isRidePoll ? 'This poll will be used to organize a ride event' : ''}
+            </Text>
+          )}
+
+          {showError && isRidePoll === null && (
+            <Text style={styles.errorText}>Please select Yes or No</Text>
+          )}
         </View>
-
-
-
-
         <View style={styles.section}>
           <Text style={styles.label}>Question</Text>
           <TextInput
@@ -178,7 +209,7 @@ export default function CreatePollScreen() {
                 style={styles.optionInput}
                 value={option}
                 onChangeText={(text) => {
-                  if(!isFirstOptionLocked(index)){
+                  if (!isFirstOptionLocked(index)) {
                     updateOption(text, index)
                   }
                 }}
@@ -345,4 +376,35 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: 'rgba(61, 217, 214, 0.1)',
   },
+  radioContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginVertical: 12,
+  },
+  radioOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  radioCircle: {
+    height: 20,
+    width: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: '#3dd9d6',
+    marginRight: 8,
+    backgroundColor: 'transparent',
+  },
+  selectedRadio: {
+    backgroundColor: '#3dd9d6',
+  },
+  radioLabel: {
+    color: '#ffffff',
+    fontSize: 16,
+  },
+  errorText: {
+    color: 'red',
+    marginTop: 4,
+    fontSize: 14,
+  },
+
 });

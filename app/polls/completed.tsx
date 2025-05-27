@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Alert, TextInput, Linking } from 'react-native';
 import { useRouter } from 'expo-router';
 import { collection, query, where, onSnapshot, doc, updateDoc, getDoc, increment, getDocs } from 'firebase/firestore';
-import { Timer, Users, CheckCircle2, CreditCard as Edit2, Save, X } from 'lucide-react-native';
+import { Timer, Users, CheckCircle2, Edit as Edit2, Save, X } from 'lucide-react-native';
 import { db } from '../utils/firebase';
 import { useUser } from '../context/UserContext';
 import { Poll } from '../types/poll';

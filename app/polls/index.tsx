@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Alert, TextInput, Modal, FlatList, Image, Linking } from 'react-native';
 import { useRouter } from 'expo-router';
 import { collection, query, where, onSnapshot, doc, updateDoc, getDoc, increment } from 'firebase/firestore';
-import { Timer, Users, CheckCircle2, CreditCard as Edit2, Save, X, ListMinus } from 'lucide-react-native';
+import { Timer, Users, CheckCircle2, Edit as Edit2, Save, X, ListMinus } from 'lucide-react-native';
 import { db } from '../utils/firebase';
 import { useUser } from '../context/UserContext';
 import { Poll } from '../types/poll';
@@ -19,6 +19,7 @@ export default function PollsScreen() {
   const [loading, setLoading] = useState(true);
   const [editingPoll, setEditingPoll] = useState<string | null>(null);
   const [editedQuestion, setEditedQuestion] = useState('');
+  const [editedIsRidePoll, setEditedIsRidePoll] = useState<boolean | null>(null);
   const [showMembers, setShowMembers] = useState(false);
   //const [members, setMembers] = useState<User[]>([]);
   const [members, setMembers] = useState<UserWithVote[]>([]);
@@ -184,6 +185,7 @@ export default function PollsScreen() {
     }
     setEditingPoll(poll.id);
     setEditedQuestion(poll.question);
+    setEditedIsRidePoll(poll.ridePoll ?? null);
   };
 
   const saveEdit = async (pollId: string) => {
@@ -192,13 +194,19 @@ export default function PollsScreen() {
         Alert.alert('Error', 'Question cannot be empty');
         return;
       }
+      if (editedIsRidePoll === null) {
+      Alert.alert('Error', 'Please select if this poll is for a ride');
+      return;
+    }
 
       await updateDoc(doc(db, 'polls', pollId), {
         question: editedQuestion.trim(),
+        ridePoll: editedIsRidePoll,
       });
 
       setEditingPoll(null);
       setEditedQuestion('');
+      setEditedIsRidePoll(null);
     } catch (error) {
       console.error('Error updating poll:', error);
       Alert.alert('Error', 'Failed to update poll');
@@ -317,6 +325,36 @@ export default function PollsScreen() {
                 <View style={styles.pollHeader}>
                   {editingPoll === poll.id ? (
                     <View style={styles.editContainer}>
+                         {/* Radio Buttons for Ride Poll */}
+    <Text style={styles.switchLabel}>Is this poll for a ride?</Text>
+    <View style={styles.radioContainer}>
+      <TouchableOpacity
+        style={styles.radioOption}
+        onPress={() => setEditedIsRidePoll(true)}
+      >
+        <View style={[
+          styles.radioCircle,
+          editedIsRidePoll === true && styles.selectedRadio
+        ]} />
+        <Text style={styles.radioLabel}>Yes</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={styles.radioOption}
+        onPress={() => setEditedIsRidePoll(false)}
+      >
+        <View style={[
+          styles.radioCircle,
+          editedIsRidePoll === false && styles.selectedRadio
+        ]} />
+        <Text style={styles.radioLabel}>No</Text>
+      </TouchableOpacity>
+    </View>
+
+    {/* Error Message if neither selected */}
+    {editedIsRidePoll === null && (
+      <Text style={styles.errorText}>Please select Yes or No</Text>
+    )}
                       <TextInput
                         style={styles.editInput}
                         value={editedQuestion}
@@ -717,5 +755,39 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: 'rgba(236, 78, 42, 0.86)',
     textTransform: 'capitalize',
+  },
+   switchLabel: {
+    fontSize: 16,
+    color: '#ffffff',
+  },
+    radioContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginVertical: 12,
+  },
+  radioOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  radioCircle: {
+    height: 20,
+    width: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: '#3dd9d6',
+    marginRight: 8,
+    backgroundColor: 'transparent',
+  },
+  selectedRadio: {
+    backgroundColor: '#3dd9d6',
+  },
+  radioLabel: {
+    color: '#ffffff',
+    fontSize: 16,
+  },
+   errorText: {
+    color: 'red',
+    marginTop: 4,
+    fontSize: 14,
   },
 });

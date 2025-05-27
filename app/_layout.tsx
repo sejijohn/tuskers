@@ -5,12 +5,24 @@ import { useFrameworkReady } from '../hooks/useFrameworkReady';
 import { useUser, UserProvider } from './context/UserContext';
 import { ActivityIndicator, View } from 'react-native';
 import * as Notifications from 'expo-notifications';
+import { registerForPushNotificationsAsync } from '../app/utils/notifications';
 
 function AuthGate({ children }: { children: React.ReactNode }) {
   const { user, loading } = useUser();
   const segments = useSegments();
 
   useEffect(() => {
+
+     registerForPushNotificationsAsync()
+    .then(token => {
+      if (token) {
+        // Optionally store token in Firebase
+        console.log('Push token:', token);
+      }
+    })
+    .catch(err => {
+      console.error('Push registration failed:', err);
+    });
     const subscription = Notifications.addNotificationResponseReceivedListener(response => {
       const data = response.notification.request.content.data;
 

@@ -7,7 +7,7 @@ import { Chat } from '../../types/chat';
 import { User } from '../../types/user';
 import { useUser } from '../../context/UserContext';
 import { TouchableOpacity } from 'react-native';
-import { ChevronLeft } from 'lucide-react-native';
+import { ChevronLeft,ArrowBigLeft } from 'lucide-react-native';
 
 export default function ChatLayout() {
   const router = useRouter();
@@ -116,9 +116,15 @@ export default function ChatLayout() {
                     router.back();
                   }
                 }}
-                style={{ marginLeft: 8 }}
+                style={{
+                  marginLeft: 8,
+                  marginRight: 8,
+                  borderWidth: 1,
+                  borderColor: '#FF6B4A',
+                  padding: 10,
+                }}
               >
-                <ChevronLeft size={24} color="#3dd9d6" />
+                <ArrowBigLeft size={24} color="#3dd9d6" />
               </TouchableOpacity>
             ),
             title: chatName || 'Chat',
