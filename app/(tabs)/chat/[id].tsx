@@ -32,105 +32,192 @@ export default function ChatRoom() {
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
   const [addingMembers, setAddingMembers] = useState(false);
   const [allUsers, setAllUsers] = useState<User[]>([]); // fetched elsewhere
+  const onEndReachedCalledDuringMomentum = useRef(false);
 
   useEffect(() => {
   // Filter out users who are already in the chat from eligibleUsers
-  setEligibleUsers(allUsers.filter(user => !members.some(m => m.id === user.id)));
-  fetchChat();
+   setEligibleUsers(allUsers.filter(user => !members.some(m => m.id === user.id)));
+  
 }, [members, allUsers]);
 
   useEffect(() => {
     if (!id) return;
-    fetchChat();
+     fetchChatMetadata();
+  loadInitialMessages();
+  return () => {
+    if (unsubscribe) unsubscribe(); // cleanup listener
+  };
   }, [id]);
 
  let unsubscribe: (() => void) | null = null;
-  const fetchChat = async () => {
-      try {
-        const chatDoc = await getDoc(doc(db, 'chats', id as string));
-        if (!chatDoc.exists()) {
-          Alert.alert(
-            'Chat Not Found',
-            'This chat may have been deleted.',
-            [{ text: 'OK', onPress: () => router.replace('/chat') }]
-          );
-          return;
+//  const fetchChat = async () => {
+//       try {
+//         const chatDoc = await getDoc(doc(db, 'chats', id as string));
+//         if (!chatDoc.exists()) {
+//           Alert.alert(
+//             'Chat Not Found',
+//             'This chat may have been deleted.',
+//             [{ text: 'OK', onPress: () => router.replace('/chat') }]
+//           );
+//           return;
+//         }
+
+//         const chatData = { id: chatDoc.id, ...chatDoc.data() } as Chat;
+//         setChat(chatData);
+
+//         if (chatData.type === 'group') {
+//           const membersData = await Promise.all(
+//             chatData.participants.map(async (participantId) => {
+//               const userDoc = await getDoc(doc(db, 'users', participantId));
+//               return { id: userDoc.id, ...userDoc.data() } as User;
+//             })
+//           );
+//           setMembers(membersData);
+//           //fetchEligibleUsers();
+//         }
+
+//         // Initial messages query
+//         const messagesQuery = query(
+//           collection(db, 'chats', id as string, 'messages'),
+//           orderBy('timestamp', 'desc'),
+//           limit(MESSAGES_PER_PAGE)
+//         );
+
+//         const messagesSnapshot = await getDocs(messagesQuery);
+//         const messagesList: Message[] = [];
+//         messagesSnapshot.forEach((doc) => {
+//           messagesList.push({ id: doc.id, ...doc.data() } as Message);
+//         });
+
+//         // Ensure messages have unique IDs by combining message ID with timestamp
+//         const uniqueMessages = messagesList.map(message => ({
+//           ...message,
+//           //uniqueId: `${message.id}-${message.timestamp}`
+//         }));
+
+//         //setMessages(uniqueMessages);
+//         setMessages(messagesList);
+//         setLastMessageDoc(messagesSnapshot.docs[messagesSnapshot.docs.length - 1]);
+//         setHasMoreMessages(messagesSnapshot.docs.length === MESSAGES_PER_PAGE);
+//         setLoading(false);
+//         setIsFirstLoad(false);
+
+//         // Set up real-time listener for new messages
+//         unsubscribe = onSnapshot(
+//           query(
+//             collection(db, 'chats', id as string, 'messages'),
+//             orderBy('timestamp', 'desc'),
+//             limit(1)
+//           ),
+//           (snapshot) => {
+//             snapshot.docChanges().forEach((change) => {
+//               if (change.type === 'added') {
+//                 const newMessage = {
+//                   id: change.doc.id,
+//                   ...change.doc.data(),
+//                   //uniqueId: `${change.doc.id}-${change.doc.data().timestamp}` 
+//                 } as Message; //& { uniqueId: string };
+//                 //setMessages(prev => [newMessage, ...prev]);
+//                 setMessages(prev => {
+//                   const exists = prev.some(msg => msg.id === newMessage.id);
+//                   if (!exists) {
+//                     return [newMessage, ...prev];
+//                   }
+//                   return prev;
+//                 });
+//               }
+//             });
+//           }
+//         );
+
+//         return () => unsubscribe();
+//       } catch (error) {
+//         console.error('Error fetching chat:', error);
+//         setLoading(false);
+//       }
+//     };
+
+
+  const fetchChatMetadata = async () => {
+  try {
+    const chatDoc = await getDoc(doc(db, 'chats', id as string));
+    if (!chatDoc.exists()) {
+      Alert.alert('Chat Not Found', 'This chat may have been deleted.', [
+        { text: 'OK', onPress: () => router.replace('/chat') },
+      ]);
+      return;
+    }
+
+    const chatData = { id: chatDoc.id, ...chatDoc.data() } as Chat;
+    setChat(chatData);
+
+    if (chatData.type === 'group') {
+      const membersData = await Promise.all(
+        chatData.participants.map(async (participantId) => {
+          const userDoc = await getDoc(doc(db, 'users', participantId));
+          return { id: userDoc.id, ...userDoc.data() } as User;
+        })
+      );
+      setMembers(membersData);
+    }
+  } catch (error) {
+    console.error('Error fetching chat metadata:', error);
+  }
+};
+
+const loadInitialMessages = async () => {
+  try {
+    setLoading(true);
+    const messagesQuery = query(
+      collection(db, 'chats', id as string, 'messages'),
+      orderBy('timestamp', 'desc'),
+      limit(MESSAGES_PER_PAGE)
+    );
+
+    const messagesSnapshot = await getDocs(messagesQuery);
+    const messagesList: Message[] = messagesSnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data(),
+    })) as Message[];
+
+    setMessages(messagesList);
+    setLastMessageDoc(messagesSnapshot.docs[messagesSnapshot.docs.length - 1]);
+    setHasMoreMessages(messagesList.length === MESSAGES_PER_PAGE);
+    setIsFirstLoad(false);
+    setLoading(false);
+
+    setupRealtimeListener();
+  } catch (error) {
+    console.error('Error loading initial messages:', error);
+    setLoading(false);
+  }
+};
+
+const setupRealtimeListener = () => {
+  if (!id) return;
+  return onSnapshot(
+    query(
+      collection(db, 'chats', id as string, 'messages'),
+      orderBy('timestamp', 'desc'),
+      limit(1)
+    ),
+    (snapshot) => {
+      snapshot.docChanges().forEach((change) => {
+        if (change.type === 'added') {
+          const newMessage = {
+            id: change.doc.id,
+            ...change.doc.data(),
+          } as Message;
+
+          setMessages((prev) => {
+            const exists = prev.some(msg => msg.id === newMessage.id);
+            return exists ? prev : [newMessage, ...prev];
+          });
         }
-
-        const chatData = { id: chatDoc.id, ...chatDoc.data() } as Chat;
-        setChat(chatData);
-
-        if (chatData.type === 'group') {
-          const membersData = await Promise.all(
-            chatData.participants.map(async (participantId) => {
-              const userDoc = await getDoc(doc(db, 'users', participantId));
-              return { id: userDoc.id, ...userDoc.data() } as User;
-            })
-          );
-          setMembers(membersData);
-          //fetchEligibleUsers();
-        }
-
-        // Initial messages query
-        const messagesQuery = query(
-          collection(db, 'chats', id as string, 'messages'),
-          orderBy('timestamp', 'desc'),
-          limit(MESSAGES_PER_PAGE)
-        );
-
-        const messagesSnapshot = await getDocs(messagesQuery);
-        const messagesList: Message[] = [];
-        messagesSnapshot.forEach((doc) => {
-          messagesList.push({ id: doc.id, ...doc.data() } as Message);
-        });
-
-        // Ensure messages have unique IDs by combining message ID with timestamp
-        const uniqueMessages = messagesList.map(message => ({
-          ...message,
-          //uniqueId: `${message.id}-${message.timestamp}`
-        }));
-
-        //setMessages(uniqueMessages);
-        setMessages(messagesList);
-        setLastMessageDoc(messagesSnapshot.docs[messagesSnapshot.docs.length - 1]);
-        setHasMoreMessages(messagesSnapshot.docs.length === MESSAGES_PER_PAGE);
-        setLoading(false);
-        setIsFirstLoad(false);
-
-        // Set up real-time listener for new messages
-        unsubscribe = onSnapshot(
-          query(
-            collection(db, 'chats', id as string, 'messages'),
-            orderBy('timestamp', 'desc'),
-            limit(1)
-          ),
-          (snapshot) => {
-            snapshot.docChanges().forEach((change) => {
-              if (change.type === 'added') {
-                const newMessage = {
-                  id: change.doc.id,
-                  ...change.doc.data(),
-                  //uniqueId: `${change.doc.id}-${change.doc.data().timestamp}` 
-                } as Message; //& { uniqueId: string };
-                //setMessages(prev => [newMessage, ...prev]);
-                setMessages(prev => {
-                  const exists = prev.some(msg => msg.id === newMessage.id);
-                  if (!exists) {
-                    return [newMessage, ...prev];
-                  }
-                  return prev;
-                });
-              }
-            });
-          }
-        );
-
-        return () => unsubscribe();
-      } catch (error) {
-        console.error('Error fetching chat:', error);
-        setLoading(false);
-      }
-    };
+      });
+    }
+  );
+};  
 
   const loadMoreMessages = async () => {
     if (!hasMoreMessages || loadingMore || !lastMessageDoc) return;
@@ -450,16 +537,23 @@ setMembers(prev => [...prev, ...newMembers]);
           renderItem={renderMessage}
           keyExtractor={(item: Message) => item.id}
           inverted
-          onEndReached={loadMoreMessages}
+          onEndReached={() => {
+    if (!onEndReachedCalledDuringMomentum.current) {
+      loadMoreMessages();
+      onEndReachedCalledDuringMomentum.current = true;
+    }
+  }}
+  onMomentumScrollBegin={() => {
+    onEndReachedCalledDuringMomentum.current = false;
+  }}
           onEndReachedThreshold={0.5}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
           contentContainerStyle={{
-            flexGrow: 1,
-            justifyContent: 'flex-end',
-            paddingBottom: 80, // match your input height
+            paddingTop: 16,
+  paddingBottom: 100, 
           }}
-          ListFooterComponent={loadingMore ? (
+          ListFooterComponent={hasMoreMessages && loadingMore ? (
             <View style={styles.loadingMoreContainer}>
               <Text style={styles.loadingText}>Loading more...</Text>
             </View>
