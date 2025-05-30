@@ -59,12 +59,22 @@ export default function MemberDashboard() {
   const [loadingPoll, setLoadingPoll] = useState(true);
   const appState = useRef(AppState.currentState);
 
+  const weatherFetchedAt = useRef<number>(0);
+const FETCH_INTERVAL = 60 * 1000; // 1 minute minimum between fetches
 
-  useFocusEffect(
-    useCallback(() => {
-      fetchWeather();
-    }, [])
-  );
+const safeFetchWeather = useCallback(() => {
+  const now = Date.now();
+  if (now - weatherFetchedAt.current < FETCH_INTERVAL) return; // prevent rapid re-fetch
+  weatherFetchedAt.current = now;
+  fetchWeather();
+}, []);
+
+
+  // useFocusEffect(
+  //   useCallback(() => {
+  //     fetchWeather();
+  //   }, [])
+  // );
 
   useEffect(() => {
     const fetchUserData = async () => {
@@ -117,20 +127,18 @@ export default function MemberDashboard() {
     };
   }, [user]);
 
-  useEffect(() => {
-    fetchWeather();
-    // Also fetch when app comes back to foreground
-    const subscription = AppState.addEventListener('change', nextAppState => {
-      if (appState.current.match(/inactive|background/) && nextAppState === 'active') {
-        // App has come to foreground
-        fetchWeather();
-      }
-      appState.current = nextAppState;
-    });
-    return () => {
-      subscription.remove();
-    };
-  }, []);
+ useEffect(() => {
+  fetchWeather(); // initial fetch
+  const subscription = AppState.addEventListener('change', nextAppState => {
+    if (appState.current.match(/inactive|background/) && nextAppState === 'active') {
+      safeFetchWeather(); // debounced
+    }
+    appState.current = nextAppState;
+  });
+  return () => {
+    subscription.remove();
+  };
+}, []);
 
   useEffect(() => {
     if (!user) return;
@@ -160,15 +168,37 @@ export default function MemberDashboard() {
     return () => unsubscribe();
   }, [user]);
 
-  const getLocationWithTimeout = (timeout = 10000): Promise<Location.LocationObject> => {
-    return Promise.race<Location.LocationObject>([
-      Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
-      new Promise<Location.LocationObject>((_, reject) => setTimeout(() => reject(new Error('Location timeout')), timeout)),
-    ]);
-  };
+
+const getLocationWithTimeout = (timeout = 10000): Promise<Location.LocationObject> => {
+  return new Promise<Location.LocationObject>((resolve, reject) => {
+    let didCancel = false;
+
+    const timer = setTimeout(() => {
+      didCancel = true;
+      reject(new Error('Location request timed out.'));
+    }, timeout);
+
+    Location.getCurrentPositionAsync({
+      accuracy: Location.Accuracy.Balanced, // You can lower or raise accuracy based on your app's needs
+    })
+      .then((location) => {
+        if (!didCancel) {
+          clearTimeout(timer);
+          resolve(location);
+        }
+      })
+      .catch((error) => {
+        if (!didCancel) {
+          clearTimeout(timer);
+          reject(error);
+        }
+      });
+  });
+};
 
 
   const fetchWeather = async () => {
+    if (weatherLoading) return;
     try {
       setWeatherLoading(true);
       setWeatherError(null);
@@ -204,7 +234,6 @@ export default function MemberDashboard() {
       setWeatherLoading(false);
     }
   };
-
   const getWeatherCondition = (code: number) => {
     if (code === 0) return 'Clear sky';
     if (code === 1) return 'Mainly clear';

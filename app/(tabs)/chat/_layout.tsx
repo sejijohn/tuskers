@@ -6,7 +6,7 @@ import { db } from '../../utils/firebase';
 import { Chat } from '../../types/chat';
 import { User } from '../../types/user';
 import { useUser } from '../../context/UserContext';
-import { TouchableOpacity } from 'react-native';
+import { TouchableOpacity,View,Pressable } from 'react-native';
 import { ChevronLeft,ArrowBigLeft } from 'lucide-react-native';
 
 export default function ChatLayout() {
@@ -68,29 +68,6 @@ export default function ChatLayout() {
           headerShown: false
         }}
       />
-      {/* <Stack.Screen 
-        name="[id]" 
-        options={({ route }) => ({ 
-          headerShown: true,
-          //headerBackVisible: true,
-          headerStyle: {
-            backgroundColor: '#243c44',
-          },
-          headerTintColor: '#3dd9d6',
-          headerTitleStyle: {
-            color: '#3dd9d6',
-          },
-          headerLeft: () => (
-            <TouchableOpacity 
-              onPress={() => router.push('/chat')}
-              style={{ marginLeft: 8 }}
-            >
-              <ChevronLeft size={24} color="#3dd9d6" />
-            </TouchableOpacity>
-          ),
-          title: chatTitles[route.params?.id as string] || 'Chat',
-        })} 
-      /> */}
       <Stack.Screen
         name="[id]"
         options={({ route }) => {
@@ -108,7 +85,7 @@ export default function ChatLayout() {
               color: '#3dd9d6',
             },
             headerLeft: () => (
-              <TouchableOpacity
+              <Pressable
                 onPress={() => {
                   if (isEmergency) {
                     router.push('/chat');
@@ -125,7 +102,7 @@ export default function ChatLayout() {
                 }}
               >
                 <ArrowBigLeft size={24} color="#3dd9d6" />
-              </TouchableOpacity>
+              </Pressable>
             ),
             title: chatName || 'Chat',
           };
@@ -142,6 +119,20 @@ export default function ChatLayout() {
           headerTitleStyle: {
             color: '#3dd9d6',
           },
+           headerLeft: () => (
+                    <Pressable
+                      onPress={() => router.push('/chat')}
+                       style={{
+                            marginLeft: 8,
+                            marginRight: 8,
+                            borderWidth: 1,
+                            borderColor: '#FF6B4A',
+                            padding: 10,
+                          }}
+                    >
+                      <ArrowBigLeft size={24} color="#3dd9d6" />
+                     </Pressable>
+                  ),
           title: 'New Chat',
         }}
       />

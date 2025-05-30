@@ -292,6 +292,7 @@ export default function ChatList() {
           </Text>
         )}
       </View>
+      <View pointerEvents="box-none">
       <TouchableOpacity
         style={[
           styles.deleteButton,
@@ -318,7 +319,9 @@ export default function ChatList() {
           color={deleting === item.id ? 'rgba(255, 107, 74, 0.5)' : '#FF6B4A'}
         />
       </TouchableOpacity>
+      </View>
     </TouchableOpacity>
+    
   );
 
   const renderActivePoll = () => {

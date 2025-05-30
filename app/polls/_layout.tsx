@@ -1,6 +1,6 @@
 import { Stack } from 'expo-router';
-import { TouchableOpacity } from 'react-native';
-import { ChevronLeft } from 'lucide-react-native';
+import { TouchableOpacity,View, Pressable } from 'react-native';
+import { ArrowBigLeft } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 
 export default function PollsLayout() {
@@ -18,12 +18,18 @@ export default function PollsLayout() {
           color: '#3dd9d6',
         },
         headerLeft: () => (
-          <TouchableOpacity 
+          <Pressable
             onPress={() => router.back()}
-            style={{ marginLeft: 8 }}
+             style={{
+                  marginLeft: 8,
+                  marginRight: 8,
+                  borderWidth: 1,
+                  borderColor: '#FF6B4A',
+                  padding: 10,
+                }}
           >
-            <ChevronLeft size={24} color="#3dd9d6" />
-          </TouchableOpacity>
+            <ArrowBigLeft size={24} color="#3dd9d6" />
+          </Pressable>
         ),
       }}
     >

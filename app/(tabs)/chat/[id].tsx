@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { StyleSheet, View, Text, TextInput, TouchableOpacity, FlatList, KeyboardAvoidingView, Platform, Image, Modal, ViewToken, Linking, Alert, TouchableWithoutFeedback, Keyboard, SafeAreaView } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
-import { collection, query, orderBy, onSnapshot, addDoc, doc, getDoc, updateDoc, limit, startAfter, getDocs,where } from 'firebase/firestore';
-import { Send, Users, X,MessageSquarePlus,Check } from 'lucide-react-native';
+import { collection, query, orderBy, onSnapshot, addDoc, doc, getDoc, updateDoc, limit, startAfter, getDocs, where,writeBatch,arrayUnion } from 'firebase/firestore';
+import { Send, Users, X, MessageSquarePlus, Check } from 'lucide-react-native';
 import { db } from '../../utils/firebase';
 import { useUser } from '../../context/UserContext';
 import { Message, Chat } from '../../types/chat';
@@ -27,197 +27,111 @@ export default function ChatRoom() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMoreMessages, setHasMoreMessages] = useState(true);
   const [isFirstLoad, setIsFirstLoad] = useState(true);
-   const [showAddMembers, setShowAddMembers] = useState(false);
+  const [showAddMembers, setShowAddMembers] = useState(false);
   const [eligibleUsers, setEligibleUsers] = useState<User[]>([]);
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
   const [addingMembers, setAddingMembers] = useState(false);
   const [allUsers, setAllUsers] = useState<User[]>([]); // fetched elsewhere
   const onEndReachedCalledDuringMomentum = useRef(false);
 
+
   useEffect(() => {
-  // Filter out users who are already in the chat from eligibleUsers
-   setEligibleUsers(allUsers.filter(user => !members.some(m => m.id === user.id)));
-  
-}, [members, allUsers]);
+    // Filter out users who are already in the chat from eligibleUsers
+    setEligibleUsers(allUsers.filter(user => !members.some(m => m.id === user.id)));
+
+  }, [members, allUsers]);
 
   useEffect(() => {
     if (!id) return;
-     fetchChatMetadata();
-  loadInitialMessages();
-  return () => {
-    if (unsubscribe) unsubscribe(); // cleanup listener
-  };
+    fetchChatMetadata();
+    loadInitialMessages();
+    return () => {
+      if (unsubscribe) unsubscribe(); // cleanup listener
+    };
   }, [id]);
 
- let unsubscribe: (() => void) | null = null;
-//  const fetchChat = async () => {
-//       try {
-//         const chatDoc = await getDoc(doc(db, 'chats', id as string));
-//         if (!chatDoc.exists()) {
-//           Alert.alert(
-//             'Chat Not Found',
-//             'This chat may have been deleted.',
-//             [{ text: 'OK', onPress: () => router.replace('/chat') }]
-//           );
-//           return;
-//         }
-
-//         const chatData = { id: chatDoc.id, ...chatDoc.data() } as Chat;
-//         setChat(chatData);
-
-//         if (chatData.type === 'group') {
-//           const membersData = await Promise.all(
-//             chatData.participants.map(async (participantId) => {
-//               const userDoc = await getDoc(doc(db, 'users', participantId));
-//               return { id: userDoc.id, ...userDoc.data() } as User;
-//             })
-//           );
-//           setMembers(membersData);
-//           //fetchEligibleUsers();
-//         }
-
-//         // Initial messages query
-//         const messagesQuery = query(
-//           collection(db, 'chats', id as string, 'messages'),
-//           orderBy('timestamp', 'desc'),
-//           limit(MESSAGES_PER_PAGE)
-//         );
-
-//         const messagesSnapshot = await getDocs(messagesQuery);
-//         const messagesList: Message[] = [];
-//         messagesSnapshot.forEach((doc) => {
-//           messagesList.push({ id: doc.id, ...doc.data() } as Message);
-//         });
-
-//         // Ensure messages have unique IDs by combining message ID with timestamp
-//         const uniqueMessages = messagesList.map(message => ({
-//           ...message,
-//           //uniqueId: `${message.id}-${message.timestamp}`
-//         }));
-
-//         //setMessages(uniqueMessages);
-//         setMessages(messagesList);
-//         setLastMessageDoc(messagesSnapshot.docs[messagesSnapshot.docs.length - 1]);
-//         setHasMoreMessages(messagesSnapshot.docs.length === MESSAGES_PER_PAGE);
-//         setLoading(false);
-//         setIsFirstLoad(false);
-
-//         // Set up real-time listener for new messages
-//         unsubscribe = onSnapshot(
-//           query(
-//             collection(db, 'chats', id as string, 'messages'),
-//             orderBy('timestamp', 'desc'),
-//             limit(1)
-//           ),
-//           (snapshot) => {
-//             snapshot.docChanges().forEach((change) => {
-//               if (change.type === 'added') {
-//                 const newMessage = {
-//                   id: change.doc.id,
-//                   ...change.doc.data(),
-//                   //uniqueId: `${change.doc.id}-${change.doc.data().timestamp}` 
-//                 } as Message; //& { uniqueId: string };
-//                 //setMessages(prev => [newMessage, ...prev]);
-//                 setMessages(prev => {
-//                   const exists = prev.some(msg => msg.id === newMessage.id);
-//                   if (!exists) {
-//                     return [newMessage, ...prev];
-//                   }
-//                   return prev;
-//                 });
-//               }
-//             });
-//           }
-//         );
-
-//         return () => unsubscribe();
-//       } catch (error) {
-//         console.error('Error fetching chat:', error);
-//         setLoading(false);
-//       }
-//     };
-
+  let unsubscribe: (() => void) | null = null;
 
   const fetchChatMetadata = async () => {
-  try {
-    const chatDoc = await getDoc(doc(db, 'chats', id as string));
-    if (!chatDoc.exists()) {
-      Alert.alert('Chat Not Found', 'This chat may have been deleted.', [
-        { text: 'OK', onPress: () => router.replace('/chat') },
-      ]);
-      return;
+    try {
+      const chatDoc = await getDoc(doc(db, 'chats', id as string));
+      if (!chatDoc.exists()) {
+        Alert.alert('Chat Not Found', 'This chat may have been deleted.', [
+          { text: 'OK', onPress: () => router.replace('/chat') },
+        ]);
+        return;
+      }
+
+      const chatData = { id: chatDoc.id, ...chatDoc.data() } as Chat;
+      setChat(chatData);
+
+      if (chatData.type === 'group') {
+        const membersData = await Promise.all(
+          chatData.participants.map(async (participantId) => {
+            const userDoc = await getDoc(doc(db, 'users', participantId));
+            return { id: userDoc.id, ...userDoc.data() } as User;
+          })
+        );
+        setMembers(membersData);
+      }
+    } catch (error) {
+      console.error('Error fetching chat metadata:', error);
     }
+  };
 
-    const chatData = { id: chatDoc.id, ...chatDoc.data() } as Chat;
-    setChat(chatData);
-
-    if (chatData.type === 'group') {
-      const membersData = await Promise.all(
-        chatData.participants.map(async (participantId) => {
-          const userDoc = await getDoc(doc(db, 'users', participantId));
-          return { id: userDoc.id, ...userDoc.data() } as User;
-        })
+  const loadInitialMessages = async () => {
+    try {
+      setLoading(true);
+      const messagesQuery = query(
+        collection(db, 'chats', id as string, 'messages'),
+        orderBy('timestamp', 'desc'),
+        limit(MESSAGES_PER_PAGE)
       );
-      setMembers(membersData);
-    }
-  } catch (error) {
-    console.error('Error fetching chat metadata:', error);
-  }
-};
 
-const loadInitialMessages = async () => {
-  try {
-    setLoading(true);
-    const messagesQuery = query(
-      collection(db, 'chats', id as string, 'messages'),
-      orderBy('timestamp', 'desc'),
-      limit(MESSAGES_PER_PAGE)
+      const messagesSnapshot = await getDocs(messagesQuery);
+      const messagesList: Message[] = messagesSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as Message[];
+
+      setMessages(messagesList);
+      setLastMessageDoc(messagesSnapshot.docs[messagesSnapshot.docs.length - 1]);
+      setHasMoreMessages(messagesList.length === MESSAGES_PER_PAGE);
+      setIsFirstLoad(false);
+      setLoading(false);
+
+      setupRealtimeListener();
+    } catch (error) {
+      console.error('Error loading initial messages:', error);
+      setLoading(false);
+    }
+  };
+
+  const setupRealtimeListener = () => {
+    if (!id) return;
+    return onSnapshot(
+      query(
+        collection(db, 'chats', id as string, 'messages'),
+        orderBy('timestamp', 'desc'),
+        limit(1)
+      ),
+      (snapshot) => {
+        snapshot.docChanges().forEach((change) => {
+          if (change.type === 'added') {
+            const newMessage = {
+              id: change.doc.id,
+              ...change.doc.data(),
+            } as Message;
+
+            setMessages((prev) => {
+              const exists = prev.some(msg => msg.id === newMessage.id);
+              return exists ? prev : [newMessage, ...prev];
+            });
+          }
+        });
+      }
     );
-
-    const messagesSnapshot = await getDocs(messagesQuery);
-    const messagesList: Message[] = messagesSnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data(),
-    })) as Message[];
-
-    setMessages(messagesList);
-    setLastMessageDoc(messagesSnapshot.docs[messagesSnapshot.docs.length - 1]);
-    setHasMoreMessages(messagesList.length === MESSAGES_PER_PAGE);
-    setIsFirstLoad(false);
-    setLoading(false);
-
-    setupRealtimeListener();
-  } catch (error) {
-    console.error('Error loading initial messages:', error);
-    setLoading(false);
-  }
-};
-
-const setupRealtimeListener = () => {
-  if (!id) return;
-  return onSnapshot(
-    query(
-      collection(db, 'chats', id as string, 'messages'),
-      orderBy('timestamp', 'desc'),
-      limit(1)
-    ),
-    (snapshot) => {
-      snapshot.docChanges().forEach((change) => {
-        if (change.type === 'added') {
-          const newMessage = {
-            id: change.doc.id,
-            ...change.doc.data(),
-          } as Message;
-
-          setMessages((prev) => {
-            const exists = prev.some(msg => msg.id === newMessage.id);
-            return exists ? prev : [newMessage, ...prev];
-          });
-        }
-      });
-    }
-  );
-};  
+  };
 
   const loadMoreMessages = async () => {
     if (!hasMoreMessages || loadingMore || !lastMessageDoc) return;
@@ -285,6 +199,7 @@ const setupRealtimeListener = () => {
       console.error('Error sending message:', error);
     }
   };
+
 
   const renderMessage = ({ item }: { item: Message /*& { uniqueId: string }*/ }) => {
     const isOwnMessage = item.senderId === user?.id;
@@ -379,22 +294,22 @@ const setupRealtimeListener = () => {
     read: 3,
   };
 
-    const fetchEligibleUsers = async () => {
+  const fetchEligibleUsers = async () => {
     try {
       const usersQuery = query(
         collection(db, 'users'),
         where('approved', '==', true),
         where('deleted', '==', false)
       );
-      
+
       const usersSnapshot = await getDocs(usersQuery);
       //const allUsers = usersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
       setAllUsers(usersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User)))
       // Filter out users who are already in the chat
-      const eligibleUsers = allUsers.filter(user => 
+      const eligibleUsers = allUsers.filter(user =>
         !chat?.participants.includes(user.id)
       );
-      
+
       setEligibleUsers(eligibleUsers);
     } catch (error) {
       console.error('Error fetching eligible users:', error);
@@ -402,13 +317,13 @@ const setupRealtimeListener = () => {
     }
   };
 
-    const handleAddMembers = async () => {
+  const handleAddMembers = async () => {
     if (!chat || selectedUsers.length === 0) return;
 
     try {
       setAddingMembers(true);
       const updatedParticipants = [...chat.participants, ...selectedUsers];
-      
+
       await updateDoc(doc(db, 'chats', chat.id), {
         participants: updatedParticipants,
         updatedAt: new Date().toISOString(),
@@ -441,20 +356,14 @@ const setupRealtimeListener = () => {
         })
       );
 
-//       setMembers(prev => [...prev, ...newMembers]);
-//       setEligibleUsers(prev =>
-//   prev.filter(user => !selectedUsers.includes(user.id))
-// );
-//       setSelectedUsers([]);
-//       setShowAddMembers(false);
-setEligibleUsers(prev =>
-  prev.filter(user => !selectedUsers.includes(user.id))
-);
-setSelectedUsers([]);
-setShowAddMembers(false);
-setMembers(prev => [...prev, ...newMembers]);
+      setEligibleUsers(prev =>
+        prev.filter(user => !selectedUsers.includes(user.id))
+      );
+      setSelectedUsers([]);
+      setShowAddMembers(false);
+      setMembers(prev => [...prev, ...newMembers]);
 
-      
+
     } catch (error) {
       console.error('Error adding members:', error);
       Alert.alert('Error', 'Failed to add members');
@@ -462,16 +371,17 @@ setMembers(prev => [...prev, ...newMembers]);
       setAddingMembers(false);
     }
   };
+  
 
   const renderEligibleUserItem = ({ item }: { item: User }) => {
     const isSelected = selectedUsers.includes(item.id);
-    
+
     return (
-      <TouchableOpacity 
+      <TouchableOpacity
         style={[styles.eligibleUserItem, isSelected && styles.selectedUserItem]}
         onPress={() => {
-          setSelectedUsers(prev => 
-            isSelected 
+          setSelectedUsers(prev =>
+            isSelected
               ? prev.filter(id => id !== item.id)
               : [...prev, item.id]
           );
@@ -486,9 +396,9 @@ setMembers(prev => [...prev, ...newMembers]);
           <Text style={styles.memberRole}>{item.role}</Text>
         </View>
         <View style={[
-                styles.checkbox,
-                selectedUsers.includes(item.id) && styles.checkboxSelected
-              ]} />
+          styles.checkbox,
+          selectedUsers.includes(item.id) && styles.checkboxSelected
+        ]} />
         {/* {isSelected && (
           <Check size={24} color="#3dd9d6" />
         )} */}
@@ -498,14 +408,14 @@ setMembers(prev => [...prev, ...newMembers]);
 
 
   return (
-  <SafeAreaView style={[{ flex: 1 }, styles.container]}>
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
-    >
-      {chat?.type === 'group' && (
-        <View style={styles.headerButtons}>
+    <SafeAreaView style={[{ flex: 1 }, styles.container]}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+      >
+        {chat?.type === 'group' && (
+          <View style={styles.headerButtons}>
             <TouchableOpacity
               style={styles.membersButton}
               onPress={() => setShowMembers(true)}
@@ -520,7 +430,7 @@ setMembers(prev => [...prev, ...newMembers]);
               onPress={() => {
                 fetchEligibleUsers();
                 setShowAddMembers(true);
-                }
+              }
               }
             >
               <MessageSquarePlus size={20} color="#3dd9d6" />
@@ -528,84 +438,95 @@ setMembers(prev => [...prev, ...newMembers]);
                 Add Member
               </Text>
             </TouchableOpacity>
-          </View>   
-          )}
-      <View style={{ flex: 1 }}>
-        <FlatList
-          ref={flatListRef}
-          data={messages}
-          renderItem={renderMessage}
-          keyExtractor={(item: Message) => item.id}
-          inverted
-          onEndReached={() => {
-    if (!onEndReachedCalledDuringMomentum.current) {
-      loadMoreMessages();
-      onEndReachedCalledDuringMomentum.current = true;
-    }
-  }}
-  onMomentumScrollBegin={() => {
-    onEndReachedCalledDuringMomentum.current = false;
-  }}
-          onEndReachedThreshold={0.5}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="on-drag"
-          contentContainerStyle={{
-            paddingTop: 16,
-  paddingBottom: 100, 
-          }}
-          ListFooterComponent={hasMoreMessages && loadingMore ? (
-            <View style={styles.loadingMoreContainer}>
-              <Text style={styles.loadingText}>Loading more...</Text>
-            </View>
-          ) : null}
-        />
+          </View>
+        )}
+        <SafeAreaView style={{ flex: 1 }}>
 
-        {/* Input bar */}
-        <View style={styles.inputContainer}>
-          <TextInput
-            value={newMessage}
-            onChangeText={setNewMessage}
-            style={styles.input}
-            placeholder="Type a message"
-            placeholderTextColor="#999"
-            multiline
-          />
-          <TouchableOpacity
-            onPress={sendMessage}
-            disabled={!newMessage.trim()}
-            style={styles.sendButton}
-          >
-            <Send size={20} color="#3dd9d6" />
-          </TouchableOpacity>
-        </View>
-      </View>
-      <Modal
-            visible={showMembers}
-            transparent
-            animationType="slide"
-            onRequestClose={() => setShowMembers(false)}
-          >
-            <View style={styles.modalContainer}>
-              <View style={styles.modalContent}>
-                <View style={styles.modalHeader}>
-                  <Text style={styles.modalTitle}>Group Members</Text>
-                  <TouchableOpacity
-                    style={styles.closeButton}
-                    onPress={() => setShowMembers(false)}
-                  >
-                    <X size={24} color="#3dd9d6" />
-                  </TouchableOpacity>
+          <View style={{ flex: 1 }}>
+            <FlatList
+              ref={flatListRef}
+              data={messages}
+              renderItem={renderMessage}
+              keyExtractor={(item: Message) => item.id}
+              inverted
+              onEndReached={() => {
+                if (!onEndReachedCalledDuringMomentum.current) {
+                  loadMoreMessages();
+                  onEndReachedCalledDuringMomentum.current = true;
+                }
+              }}
+              onMomentumScrollBegin={() => {
+                onEndReachedCalledDuringMomentum.current = false;
+              }}
+              onEndReachedThreshold={0.5}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
+              contentContainerStyle={{
+                paddingTop: 16,
+                paddingBottom: 100,
+              }}
+              ListFooterComponent={hasMoreMessages && loadingMore ? (
+                <View style={styles.loadingMoreContainer}>
+                  <Text style={styles.loadingText}>Loading more...</Text>
                 </View>
-                <FlatList
-                  data={members}
-                  renderItem={renderMemberItem}
-                  keyExtractor={(item) => item.id}
-                  contentContainerStyle={styles.membersList}
+              ) : null}
+            />
+
+            <KeyboardAvoidingView
+              style={{ flex: 1 }}
+              behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+              keyboardVerticalOffset={Platform.OS === 'android' ? 0 : 64} // adjust if you have a header
+            >
+
+              {/* Input bar */}
+              <View style={styles.inputContainer}>
+                <TextInput
+                  value={newMessage}
+                  onChangeText={setNewMessage}
+                  style={styles.input}
+                  placeholder="Type a message"
+                  placeholderTextColor="#999"
+                  multiline
                 />
+                <TouchableOpacity
+                  onPress={sendMessage}
+                  disabled={!newMessage.trim()}
+                  style={styles.sendButton}
+                >
+                  <Send size={20} color="#3dd9d6" />
+                </TouchableOpacity>
               </View>
+            </KeyboardAvoidingView>
+          </View>
+
+        </SafeAreaView>
+        <Modal
+          visible={showMembers}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setShowMembers(false)}
+        >
+          <View style={styles.modalContainer}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Group Members</Text>
+                <TouchableOpacity
+                  style={styles.closeButton}
+                  onPress={() => setShowMembers(false)}
+                >
+                  <X size={24} color="#3dd9d6" />
+                </TouchableOpacity>
+              </View>
+              <FlatList
+                data={members}
+                renderItem={renderMemberItem}
+                keyExtractor={(item) => item.id}
+                contentContainerStyle={styles.membersList}
+              />
             </View>
-          </Modal>
-          {/* Add Members Modal */}
+          </View>
+        </Modal>
+        {/* Add Members Modal */}
         <Modal
           visible={showAddMembers}
           transparent
@@ -626,16 +547,16 @@ setMembers(prev => [...prev, ...newMembers]);
                   <X size={24} color="#3dd9d6" />
                 </TouchableOpacity>
               </View>
-              
+
               <FlatList
                 data={eligibleUsers}
                 renderItem={renderEligibleUserItem}
                 keyExtractor={(item) => item.id}
                 contentContainerStyle={styles.membersList}
                 keyboardShouldPersistTaps="handled"
-            keyboardDismissMode="on-drag"
+                keyboardDismissMode="on-drag"
               />
-              
+
               {selectedUsers.length > 0 && (
                 <TouchableOpacity
                   style={[
@@ -653,8 +574,8 @@ setMembers(prev => [...prev, ...newMembers]);
             </View>
           </View>
         </Modal>
-    </KeyboardAvoidingView>
-  </SafeAreaView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
 
   );
 }
@@ -663,7 +584,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#1a2f35',
-    padding:10
+    padding: 10
   },
   messagesList: {
     padding: 16,
@@ -831,7 +752,7 @@ const styles = StyleSheet.create({
     padding: 16,
     alignItems: 'center',
   },
-   newChatButton: {
+  newChatButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
@@ -839,13 +760,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-   headerButtons: {
+  headerButtons: {
     flexDirection: 'row',
     gap: 8,
     justifyContent: 'center', // ⬅️ center items horizontally
-  alignItems: 'center', 
+    alignItems: 'center',
   },
-    eligibleUserItem: {
+  eligibleUserItem: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#243c44',
@@ -853,12 +774,12 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: 8,
   },
-    selectedUserItem: {
+  selectedUserItem: {
     backgroundColor: 'rgba(61, 217, 214, 0.1)',
     borderWidth: 1,
     borderColor: '#3dd9d6',
   },
-   addMembersButton: {
+  addMembersButton: {
     backgroundColor: '#3dd9d6',
     padding: 16,
     borderRadius: 8,
@@ -868,12 +789,12 @@ const styles = StyleSheet.create({
   addMembersButtonDisabled: {
     opacity: 0.5,
   },
-    addMembersButtonText: {
+  addMembersButtonText: {
     color: '#1a2f35',
     fontSize: 16,
     fontWeight: '600',
   },
-   checkbox: {
+  checkbox: {
     width: 24,
     height: 24,
     borderRadius: 12,
