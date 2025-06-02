@@ -119,8 +119,6 @@ export default function ChatLayout() {
                 style={{
                   marginLeft: 8,
                   marginRight: 8,
-                  borderWidth: 1,
-                  borderColor: '#FF6B4A',
                   padding: 10,
                 }}
               >

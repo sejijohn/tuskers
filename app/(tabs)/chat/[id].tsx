@@ -352,13 +352,7 @@ const setupRealtimeListener = () => {
           return { id: userId, ...userDoc.data() } as User;
         })
       );
-
-//       setMembers(prev => [...prev, ...newMembers]);
-//       setEligibleUsers(prev =>
-//   prev.filter(user => !selectedUsers.includes(user.id))
-// );
-//       setSelectedUsers([]);
-//       setShowAddMembers(false);
+      
 setEligibleUsers(prev =>
   prev.filter(user => !selectedUsers.includes(user.id))
 );

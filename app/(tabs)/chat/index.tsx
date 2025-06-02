@@ -401,8 +401,10 @@ export default function ChatList() {
 
   return (
     <View style={styles.container}>
+      
       <View style={styles.header}>
         <Text style={styles.title}>Chats</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
         <View style={styles.headerButtons}>
           <TouchableOpacity
             style={[styles.newChatButton, styles.pollButton, activePoll && styles.disabledButton]}
@@ -442,7 +444,9 @@ export default function ChatList() {
             <MessageSquarePlus size={24} color="#3dd9d6" />
           </TouchableOpacity>
         </View>
+        </ScrollView>
       </View>
+      
 
       <FlatList
         data={chats}
