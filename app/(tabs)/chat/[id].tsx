@@ -472,11 +472,11 @@ export default function ChatRoom() {
               ) : null}
             />
 
-            <KeyboardAvoidingView
+            {/* <KeyboardAvoidingView
               style={{ flex: 1 }}
               behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
               keyboardVerticalOffset={Platform.OS === 'android' ? 0 : 64} // adjust if you have a header
-            >
+            > */}
 
               {/* Input bar */}
               <View style={styles.inputContainer}>
@@ -496,7 +496,7 @@ export default function ChatRoom() {
                   <Send size={20} color="#3dd9d6" />
                 </TouchableOpacity>
               </View>
-            </KeyboardAvoidingView>
+            {/* </KeyboardAvoidingView> */}
           </View>
 
         </SafeAreaView>

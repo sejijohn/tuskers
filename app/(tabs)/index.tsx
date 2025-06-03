@@ -198,7 +198,7 @@ const getLocationWithTimeout = (timeout = 10000): Promise<Location.LocationObjec
 
 
   const fetchWeather = async () => {
-    if (weatherLoading) return;
+    //if (weatherLoading) return;
     try {
       setWeatherLoading(true);
       setWeatherError(null);
@@ -227,6 +227,7 @@ const getLocationWithTimeout = (timeout = 10000): Promise<Location.LocationObjec
         humidity: data.current.relative_humidity_2m,
         precipitation: data.current.precipitation
       });
+      setWeatherLoading(false);
     } catch (error) {
       console.error('Error fetching weather:', error);
       setWeatherError('Unable to fetch weather data');
